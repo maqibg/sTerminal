@@ -17,10 +17,110 @@ pub struct DetectedShell {
 /// - macOS / Linux：探测 Bash / Zsh / Fish
 ///
 /// # 返回
-/// - `Ok(Vec<DetectedShell>)`: 至少包含一个系统默认 Shell
+/// - `Ok(Vec<DetectedShell>)`: 实际存在的 Shell 列表
 /// - `Err(String)`: 探测完全失败（极少见）
-///
-/// DEV-B 负责完整实现
 pub fn detect_available_shells() -> Result<Vec<DetectedShell>, String> {
-    todo!("DEV-B 实现：按平台探测可用 Shell 列表")
+    let mut shells = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    detect_windows_shells(&mut shells);
+
+    #[cfg(not(target_os = "windows"))]
+    detect_unix_shells(&mut shells);
+
+    // 至少保证返回一个 Shell；若列表为空尝试 fallback
+    if shells.is_empty() {
+        return Err("No available shells detected on this system".to_string());
+    }
+
+    Ok(shells)
+}
+
+/// Windows 平台 Shell 探测
+#[cfg(target_os = "windows")]
+fn detect_windows_shells(shells: &mut Vec<DetectedShell>) {
+    // 候选列表：(shell_type, display_name, path, is_default)
+    let candidates: &[(&str, &str, &str, bool)] = &[
+        (
+            "powershell",
+            "PowerShell 5.1",
+            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+            true,
+        ),
+        (
+            "pwsh",
+            "PowerShell 7",
+            r"C:\Program Files\PowerShell\7\pwsh.exe",
+            false,
+        ),
+        (
+            "cmd",
+            "Command Prompt",
+            r"C:\Windows\System32\cmd.exe",
+            false,
+        ),
+        (
+            "git-bash",
+            "Git Bash",
+            r"C:\Program Files\Git\bin\bash.exe",
+            false,
+        ),
+    ];
+
+    for (shell_type, display_name, path, is_default) in candidates {
+        if std::path::Path::new(path).exists() {
+            shells.push(DetectedShell {
+                shell_type: shell_type.to_string(),
+                display_name: display_name.to_string(),
+                path: path.to_string(),
+                is_default: *is_default,
+            });
+        }
+    }
+
+    // 若 PowerShell 5.1 不存在（极罕见），则将第一个探测到的设为默认
+    if !shells.is_empty() && !shells.iter().any(|s| s.is_default) {
+        shells[0].is_default = true;
+    }
+}
+
+/// Unix 平台（Linux/macOS）Shell 探测
+#[cfg(not(target_os = "windows"))]
+fn detect_unix_shells(shells: &mut Vec<DetectedShell>) {
+    let candidates: &[(&str, &str, &str)] = &[
+        ("bash", "Bash", "/bin/bash"),
+        ("zsh", "Zsh", "/bin/zsh"),
+        ("fish", "Fish", "/usr/bin/fish"),
+        ("bash", "Bash", "/usr/bin/bash"),
+        ("zsh", "Zsh", "/usr/bin/zsh"),
+    ];
+
+    for (shell_type, display_name, path) in candidates {
+        // 避免重复添加同类型 Shell
+        if std::path::Path::new(path).exists()
+            && !shells.iter().any(|s: &DetectedShell| s.shell_type == *shell_type)
+        {
+            shells.push(DetectedShell {
+                shell_type: shell_type.to_string(),
+                display_name: display_name.to_string(),
+                path: path.to_string(),
+                is_default: false,
+            });
+        }
+    }
+
+    // 按优先级设置默认 Shell：zsh > bash > fish
+    let default_priority = ["zsh", "bash", "fish"];
+    let mut default_set = false;
+    for preferred in &default_priority {
+        if let Some(s) = shells.iter_mut().find(|s| s.shell_type == *preferred) {
+            s.is_default = true;
+            default_set = true;
+            break;
+        }
+    }
+    // 回退：将第一个设为默认
+    if !default_set && !shells.is_empty() {
+        shells[0].is_default = true;
+    }
 }
