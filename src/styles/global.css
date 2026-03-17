@@ -143,6 +143,34 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* 窗口控制按钮 */
+.win-btn {
+  width: 46px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 0;
+  font-size: 12px;
+  padding: 0;
+}
+
+.win-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.win-btn--close {
+  color: var(--text-muted);
+}
+
+.win-btn--close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
 /* 输入框基础样式 */
 input,
 textarea {

@@ -46,21 +46,21 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
         {/* 窗口控制按钮 */}
         <button
-          style={{ ...winBtnStyle }}
+          className="win-btn"
           onClick={handleMinimize}
           title="最小化"
         >
           ─
         </button>
         <button
-          style={{ ...winBtnStyle }}
+          className="win-btn"
           onClick={handleMaximize}
           title="最大化/还原"
         >
           □
         </button>
         <button
-          style={{ ...winBtnStyle, ...closeBtnStyle }}
+          className="win-btn win-btn--close"
           onClick={handleClose}
           title="关闭"
         >
@@ -128,23 +128,6 @@ const separatorStyle: React.CSSProperties = {
   height: 20,
   background: "var(--border, #333)",
   margin: "0 4px",
-};
-
-const winBtnStyle: React.CSSProperties = {
-  width: 46,
-  height: 36,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background: "transparent",
-  color: "var(--text-secondary, #999)",
-  borderRadius: 0,
-  fontSize: 12,
-  padding: 0,
-};
-
-const closeBtnStyle: React.CSSProperties = {
-  color: "var(--text-muted, #666)",
 };
 
 export default TitleBar;

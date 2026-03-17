@@ -69,7 +69,7 @@ const SingleTerminal: React.FC<{
           flex: 1,
           overflow: "hidden",
           minHeight: 0,
-          display: isAlive ? "block" : "none",
+          display: isAlive ? "flex" : "none",
         }}
       />
       {!isAlive && (
