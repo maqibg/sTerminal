@@ -14,6 +14,8 @@ const SHELL_ICON_MAP: Record<string, ShellIconInfo> = {
   zsh: { icon: "Z", color: "#F15A24" },
   fish: { icon: "><>", color: "#34CCEE" },
   "git-bash": { icon: "$", color: "#F05033" },
+  wsl: { icon: "WSL", color: "#0078d4" },
+  nu: { icon: "NU", color: "#4f46e5" },
 };
 
 const DEFAULT_ICON: ShellIconInfo = { icon: "T", color: "#888" };

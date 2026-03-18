@@ -77,3 +77,17 @@ export async function terminalGetCwd(terminalId: string): Promise<string> {
 export async function shellListAvailable(): Promise<ShellInfo[]> {
   return invoke("shell_list_available");
 }
+
+/**
+ * 打开原生文件对话框选择终端可执行文件
+ */
+export async function terminalPickExecutable(): Promise<string | null> {
+  return invoke("terminal_pick_executable");
+}
+
+/**
+ * 打开原生目录对话框选择终端启动目录
+ */
+export async function terminalPickDirectory(): Promise<string | null> {
+  return invoke("terminal_pick_directory");
+}

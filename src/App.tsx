@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import "./styles/global.css";
 import "./styles/terminal.css";
 import "./styles/tabbar.css";
@@ -6,12 +6,15 @@ import { TitleBar } from "./components/titlebar/TitleBar";
 import { LayoutRenderer } from "./components/layout/LayoutRenderer";
 import { SaveLayoutDialog } from "./components/layout-manager/SaveLayoutDialog";
 import { LayoutManagerDrawer } from "./components/layout-manager/LayoutManagerDrawer";
+import { GlobalSettingsDialog } from "./components/settings/GlobalSettingsDialog";
 import { Toast } from "./components/Toast";
 import { useLayoutStore } from "./store/layoutStore";
+import { useAppSettingsStore } from "./store/appSettingsStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
-import { layoutUpdate } from "./ipc/layoutApi";
+import { layoutUpdate, settingsGet, settingsSave } from "./ipc/layoutApi";
+import { shellListAvailable } from "./ipc/terminalApi";
 import { collectLeaves } from "./utils/layoutTree";
-import type { LayoutNode } from "./types/layout";
+import type { AppSettings, LayoutNode } from "./types/layout";
 
 interface ToastState {
   id: number;
@@ -34,9 +37,16 @@ export function App() {
   const setActiveLayout = useLayoutStore((s) => s.setActiveLayout);
   const layoutDirty = useLayoutStore((s) => s.layoutDirty);
   const markLayoutClean = useLayoutStore((s) => s.markLayoutClean);
+  const updateTabConfig = useLayoutStore((s) => s.updateTabConfig);
+  const appSettings = useAppSettingsStore((s) => s.settings);
+  const systemShells = useAppSettingsStore((s) => s.systemShells);
+  const settingsHydrated = useAppSettingsStore((s) => s.hydrated);
+  const hydrateAppSettings = useAppSettingsStore((s) => s.hydrate);
+  const updateAppSettings = useAppSettingsStore((s) => s.updateSettings);
 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showLayoutManager, setShowLayoutManager] = useState(false);
+  const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [toasts, setToasts] = useState<ToastState[]>([]);
 
   // 布局名称递增计数
@@ -55,6 +65,71 @@ export function App() {
   const removeToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  useEffect(() => {
+    Promise.all([settingsGet(), shellListAvailable()])
+      .then(([settings, shells]) => {
+        hydrateAppSettings(settings, shells);
+      })
+      .catch((err) => {
+        addToast("加载全局设置失败：" + String(err), "error");
+      });
+  }, [addToast, hydrateAppSettings]);
+
+  useEffect(() => {
+    if (!settingsHydrated || activeLayoutId !== null) return;
+
+    const leaves = collectLeaves(layoutTree);
+    const firstLeaf = leaves[0];
+    const firstSession = firstLeaf?.tabs[0];
+    if (
+      leaves.length !== 1 ||
+      !firstLeaf ||
+      !firstSession ||
+      firstSession.shellPath ||
+      firstSession.workingDirectory
+    ) {
+      return;
+    }
+
+    const fallbackSystemShell =
+      systemShells.find((shell) => shell.isDefault) ?? systemShells[0];
+    const nextDefaultId =
+      appSettings.defaultTerminalId ||
+      (fallbackSystemShell
+        ? `system:${fallbackSystemShell.type}:${fallbackSystemShell.path.toLowerCase()}`
+        : "");
+    const customDefault = appSettings.customTerminals.find(
+      (terminal) => terminal.id === nextDefaultId
+    );
+    const selectedSystem = systemShells.find(
+      (shell) => `system:${shell.type}:${shell.path.toLowerCase()}` === nextDefaultId
+    );
+
+    if (customDefault) {
+      updateTabConfig(firstLeaf.id, firstSession.id, {
+        shellType: customDefault.shellType,
+        shellPath: customDefault.path,
+        workingDirectory:
+          customDefault.startDirectory || appSettings.defaultWorkingDirectory,
+      });
+    } else if (selectedSystem) {
+      updateTabConfig(firstLeaf.id, firstSession.id, {
+        shellType: selectedSystem.type,
+        shellPath: selectedSystem.path,
+        workingDirectory: appSettings.defaultWorkingDirectory,
+      });
+    }
+  }, [
+    activeLayoutId,
+    appSettings.customTerminals,
+    appSettings.defaultTerminalId,
+    appSettings.defaultWorkingDirectory,
+    layoutTree,
+    settingsHydrated,
+    systemShells,
+    updateTabConfig,
+  ]);
 
   const handleSaveLayout = useCallback(async () => {
     if (activeLayoutId) {
@@ -88,6 +163,16 @@ export function App() {
   const handleWorkdirWarning = (message: string) => {
     addToast(message, "warning");
   };
+
+  const handleSaveGlobalSettings = useCallback(
+    async (settings: AppSettings) => {
+      await settingsSave(settings);
+      updateAppSettings(settings);
+      setShowGlobalSettings(false);
+      addToast("全局设置已保存", "success");
+    },
+    [addToast, updateAppSettings]
+  );
 
   // 快捷键：操作当前焦点面板
   useKeyboardShortcuts({
@@ -131,6 +216,7 @@ export function App() {
     >
       <TitleBar
         onOpenLayoutManager={() => setShowLayoutManager(true)}
+        onOpenSettings={() => setShowGlobalSettings(true)}
         activeLayoutName={activeLayoutName}
       />
 
@@ -145,6 +231,15 @@ export function App() {
           tree={layoutTree}
           onSuccess={handleSaveSuccess}
           onCancel={() => setShowSaveDialog(false)}
+        />
+      )}
+
+      {showGlobalSettings && (
+        <GlobalSettingsDialog
+          settings={appSettings}
+          systemShells={systemShells}
+          onCancel={() => setShowGlobalSettings(false)}
+          onSave={handleSaveGlobalSettings}
         />
       )}
 

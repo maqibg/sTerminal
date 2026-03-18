@@ -37,6 +37,42 @@ export interface ShellInfo {
 }
 
 /**
+ * 用户自定义终端配置（持久化）
+ */
+export interface CustomTerminalProfile {
+  /** 自定义终端唯一 ID */
+  id: string;
+  /** 用户自定义显示名称 */
+  name: string;
+  /** Shell 类型标识符；用于图标、默认值和兼容旧逻辑 */
+  shellType: string;
+  /** 可执行文件完整绝对路径 */
+  path: string;
+  /** 该终端默认启动目录，空字符串表示使用全局默认目录 */
+  startDirectory: string;
+}
+
+/**
+ * 全局设置弹窗中可选择的终端项
+ */
+export interface TerminalOption {
+  /** 稳定 ID，用于默认终端选择 */
+  id: string;
+  /** 用户可见名称 */
+  name: string;
+  /** 可执行文件路径 */
+  path: string;
+  /** Shell 类型标识符 */
+  shellType: string;
+  /** 默认启动目录 */
+  startDirectory: string;
+  /** 来源：系统自动识别 / 用户自定义 */
+  source: "system" | "custom";
+  /** 是否为系统默认终端 */
+  isDefault: boolean;
+}
+
+/**
  * terminal:output 事件 Payload
  */
 export interface TerminalOutputEvent {

@@ -12,6 +12,7 @@ import {
   findLeafById,
   createSession,
 } from "../utils/layoutTree";
+import { getDefaultTerminalSessionConfig } from "./appSettingsStore";
 
 /** 面板自动命名计数器 */
 let panelNameCounter = 1;
@@ -20,7 +21,10 @@ let panelNameCounter = 1;
  * 创建初始单面板叶子节点（应用启动时的默认布局）
  */
 function createInitialLeaf(): TerminalLeaf {
-  const session = createSession(`控制台 ${panelNameCounter++}`);
+  const session = createSession(
+    `控制台 ${panelNameCounter++}`,
+    getDefaultTerminalSessionConfig()
+  );
   return {
     type: "terminal",
     id: generateId(),
@@ -138,6 +142,15 @@ export type LayoutStore = LayoutState & LayoutActions;
 export const useLayoutStore = create<LayoutStore>((set, get) => {
   const initialLeaf = createInitialLeaf();
 
+  function mergeSessionConfig(
+    config?: Partial<Pick<TerminalSession, "shellType" | "shellPath" | "workingDirectory">>
+  ) {
+    return {
+      ...getDefaultTerminalSessionConfig(),
+      ...config,
+    };
+  }
+
   return {
     layoutTree: initialLeaf,
     focusedPanelId: initialLeaf.id,
@@ -146,7 +159,10 @@ export const useLayoutStore = create<LayoutStore>((set, get) => {
     layoutDirty: false,
 
     splitPanel(panelId, direction, config) {
-      const session = createSession(`控制台 ${panelNameCounter++}`, config);
+      const session = createSession(
+        `控制台 ${panelNameCounter++}`,
+        mergeSessionConfig(config)
+      );
       const newLeaf: TerminalLeaf = {
         type: "terminal",
         id: generateId(),
@@ -201,7 +217,10 @@ export const useLayoutStore = create<LayoutStore>((set, get) => {
     },
 
     duplicatePanel(panelId, direction, config) {
-      const session = createSession(`控制台 ${panelNameCounter++}`, config);
+      const session = createSession(
+        `控制台 ${panelNameCounter++}`,
+        mergeSessionConfig(config)
+      );
       const newLeaf: TerminalLeaf = {
         type: "terminal",
         id: generateId(),
@@ -259,7 +278,10 @@ export const useLayoutStore = create<LayoutStore>((set, get) => {
     },
 
     addTab(leafId, config) {
-      const session = createSession(`控制台 ${panelNameCounter++}`, config);
+      const session = createSession(
+        `控制台 ${panelNameCounter++}`,
+        mergeSessionConfig(config)
+      );
       set((state) => {
         const leaf = findLeafById(state.layoutTree, leafId);
         if (!leaf) return state;

@@ -128,3 +128,22 @@ pub async fn shell_list_available() -> Result<Vec<ShellInfo>, String> {
         })
         .collect())
 }
+
+/// 选择终端可执行文件
+#[tauri::command]
+pub async fn terminal_pick_executable() -> Result<Option<String>, String> {
+    Ok(rfd::FileDialog::new()
+        .set_title("选择终端可执行文件")
+        .add_filter("Executables", &["exe", "cmd", "bat", "com", "ps1", "sh"])
+        .pick_file()
+        .map(|path| path.to_string_lossy().to_string()))
+}
+
+/// 选择终端启动目录
+#[tauri::command]
+pub async fn terminal_pick_directory() -> Result<Option<String>, String> {
+    Ok(rfd::FileDialog::new()
+        .set_title("选择终端启动目录")
+        .pick_folder()
+        .map(|path| path.to_string_lossy().to_string()))
+}

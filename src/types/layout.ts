@@ -1,3 +1,5 @@
+import type { CustomTerminalProfile } from "./terminal";
+
 /**
  * 单个终端会话
  */
@@ -111,6 +113,10 @@ export interface AppStore {
 export interface AppSettings {
   /** 默认 Shell 类型标识符，如 'powershell' | 'bash' */
   defaultShell: string;
+  /** 默认终端稳定 ID；为空时按 defaultShell / 系统默认回退 */
+  defaultTerminalId: string;
   /** 默认初始工作目录绝对路径，空字符串表示使用用户 Home 目录 */
   defaultWorkingDirectory: string;
+  /** 用户手动添加的终端列表 */
+  customTerminals: CustomTerminalProfile[];
 }

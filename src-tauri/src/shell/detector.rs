@@ -39,48 +39,112 @@ pub fn detect_available_shells() -> Result<Vec<DetectedShell>, String> {
 /// Windows 平台 Shell 探测
 #[cfg(target_os = "windows")]
 fn detect_windows_shells(shells: &mut Vec<DetectedShell>) {
-    // 候选列表：(shell_type, display_name, path, is_default)
-    let candidates: &[(&str, &str, &str, bool)] = &[
-        (
-            "powershell",
-            "PowerShell 5.1",
-            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
-            true,
-        ),
-        (
-            "pwsh",
-            "PowerShell 7",
-            r"C:\Program Files\PowerShell\7\pwsh.exe",
-            false,
-        ),
-        (
-            "cmd",
-            "Command Prompt",
-            r"C:\Windows\System32\cmd.exe",
-            false,
-        ),
-        (
-            "git-bash",
-            "Git Bash",
-            r"C:\Program Files\Git\bin\bash.exe",
-            false,
-        ),
+    let fixed_candidates: &[(&str, &str, &str, bool)] = &[
+        ("powershell", "PowerShell 5.1", r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", true),
+        ("pwsh", "PowerShell 7", r"C:\Program Files\PowerShell\7\pwsh.exe", false),
+        ("cmd", "Command Prompt", r"C:\Windows\System32\cmd.exe", false),
+        ("git-bash", "Git Bash", r"C:\Program Files\Git\bin\bash.exe", false),
+        ("wsl", "WSL", r"C:\Windows\System32\wsl.exe", false),
     ];
 
-    for (shell_type, display_name, path, is_default) in candidates {
-        if std::path::Path::new(path).exists() {
-            shells.push(DetectedShell {
-                shell_type: shell_type.to_string(),
-                display_name: display_name.to_string(),
-                path: path.to_string(),
-                is_default: *is_default,
-            });
+    for (shell_type, display_name, path, is_default) in fixed_candidates {
+        push_shell_if_exists(shells, shell_type, display_name, path, *is_default);
+    }
+
+    let path_candidates: &[(&str, &str, &str, bool)] = &[
+        ("powershell", "PowerShell", "powershell.exe", true),
+        ("pwsh", "PowerShell 7", "pwsh.exe", false),
+        ("cmd", "Command Prompt", "cmd.exe", false),
+        ("git-bash", "Git Bash", "bash.exe", false),
+        ("wsl", "WSL", "wsl.exe", false),
+        ("nu", "Nushell", "nu.exe", false),
+    ];
+
+    for (shell_type, display_name, executable, is_default) in path_candidates {
+        for path in find_windows_executable_paths(executable) {
+            let resolved_type = if *shell_type == "git-bash" {
+                classify_bash_on_windows(&path)
+            } else {
+                (*shell_type).to_string()
+            };
+            let resolved_name = if resolved_type == "bash" {
+                "Bash".to_string()
+            } else {
+                display_name.to_string()
+            };
+            push_shell(shells, &resolved_type, &resolved_name, &path, *is_default);
         }
     }
 
     // 若 PowerShell 5.1 不存在（极罕见），则将第一个探测到的设为默认
     if !shells.is_empty() && !shells.iter().any(|s| s.is_default) {
         shells[0].is_default = true;
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn push_shell_if_exists(
+    shells: &mut Vec<DetectedShell>,
+    shell_type: &str,
+    display_name: &str,
+    path: &str,
+    is_default: bool,
+) {
+    if std::path::Path::new(path).exists() {
+        push_shell(shells, shell_type, display_name, path, is_default);
+    }
+}
+
+fn push_shell(
+    shells: &mut Vec<DetectedShell>,
+    shell_type: &str,
+    display_name: &str,
+    path: &str,
+    is_default: bool,
+) {
+    if shells
+        .iter()
+        .any(|shell| shell.path.eq_ignore_ascii_case(path))
+    {
+        return;
+    }
+
+    shells.push(DetectedShell {
+        shell_type: shell_type.to_string(),
+        display_name: display_name.to_string(),
+        path: path.to_string(),
+        is_default,
+    });
+}
+
+#[cfg(target_os = "windows")]
+fn find_windows_executable_paths(executable: &str) -> Vec<String> {
+    let output = std::process::Command::new("where")
+        .arg(executable)
+        .output();
+
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| line.to_string())
+        .collect()
+}
+
+#[cfg(target_os = "windows")]
+fn classify_bash_on_windows(path: &str) -> String {
+    let lower = path.to_lowercase();
+    if lower.contains(r"\git\") {
+        "git-bash".to_string()
+    } else {
+        "bash".to_string()
     }
 }
 

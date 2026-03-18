@@ -56,20 +56,49 @@ pub struct SavedLayoutMeta {
 
 /// 应用设置，对应前端 AppSettings
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomTerminalProfile {
+    /// 自定义终端唯一 ID
+    pub id: String,
+    /// 显示名称
+    pub name: String,
+    /// Shell 类型标识符
+    #[serde(rename = "shellType")]
+    pub shell_type: String,
+    /// 可执行文件路径
+    pub path: String,
+    /// 启动目录
+    #[serde(rename = "startDirectory", default)]
+    pub start_directory: String,
+}
+
+/// 应用设置，对应前端 AppSettings
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     /// 默认 Shell 类型标识符
-    #[serde(rename = "defaultShell")]
+    #[serde(rename = "defaultShell", default = "default_shell")]
     pub default_shell: String,
+    /// 默认终端稳定 ID
+    #[serde(rename = "defaultTerminalId", default)]
+    pub default_terminal_id: String,
     /// 默认初始工作目录，空字符串使用 Home 目录
-    #[serde(rename = "defaultWorkingDirectory")]
+    #[serde(rename = "defaultWorkingDirectory", default)]
     pub default_working_directory: String,
+    /// 用户自定义终端
+    #[serde(rename = "customTerminals", default)]
+    pub custom_terminals: Vec<CustomTerminalProfile>,
+}
+
+fn default_shell() -> String {
+    "powershell".to_string()
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         AppSettings {
-            default_shell: "powershell".to_string(),
+            default_shell: default_shell(),
+            default_terminal_id: String::new(),
             default_working_directory: String::new(),
+            custom_terminals: Vec::new(),
         }
     }
 }
