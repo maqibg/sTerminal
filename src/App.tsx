@@ -42,6 +42,7 @@ export function App() {
   const systemShells = useAppSettingsStore((s) => s.systemShells);
   const settingsHydrated = useAppSettingsStore((s) => s.hydrated);
   const hydrateAppSettings = useAppSettingsStore((s) => s.hydrate);
+  const setSystemShells = useAppSettingsStore((s) => s.setSystemShells);
   const updateAppSettings = useAppSettingsStore((s) => s.updateSettings);
 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -67,9 +68,9 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    Promise.all([settingsGet(), shellListAvailable()])
-      .then(([settings, shells]) => {
-        hydrateAppSettings(settings, shells);
+    settingsGet()
+      .then((settings) => {
+        hydrateAppSettings(settings);
       })
       .catch((err) => {
         addToast("加载全局设置失败：" + String(err), "error");
@@ -174,6 +175,19 @@ export function App() {
     [addToast, updateAppSettings]
   );
 
+  const handleDetectSystemShells = useCallback(async () => {
+    try {
+      const shells = await shellListAvailable();
+      setSystemShells(shells);
+      addToast(`已检测到 ${shells.length} 个系统终端`, "success");
+      return shells;
+    } catch (err) {
+      const message = "检测系统终端失败：" + String(err);
+      addToast(message, "error");
+      throw err;
+    }
+  }, [addToast, setSystemShells]);
+
   // 快捷键：操作当前焦点面板
   useKeyboardShortcuts({
     onSplitHorizontal: () => {
@@ -238,6 +252,7 @@ export function App() {
         <GlobalSettingsDialog
           settings={appSettings}
           systemShells={systemShells}
+          onDetectSystemShells={handleDetectSystemShells}
           onCancel={() => setShowGlobalSettings(false)}
           onSave={handleSaveGlobalSettings}
         />

@@ -129,7 +129,8 @@ interface AppSettingsStoreState {
   settings: AppSettings;
   systemShells: ShellInfo[];
   hydrated: boolean;
-  hydrate: (settings: AppSettings, systemShells: ShellInfo[]) => void;
+  hydrate: (settings: AppSettings) => void;
+  setSystemShells: (shells: ShellInfo[]) => void;
   updateSettings: (settings: AppSettings) => void;
 }
 
@@ -138,16 +139,19 @@ export const useAppSettingsStore = create<AppSettingsStoreState>((set) => ({
   systemShells: [],
   hydrated: false,
 
-  hydrate(settings, systemShells) {
+  hydrate(settings) {
     set({
       settings: {
         ...DEFAULT_SETTINGS,
         ...settings,
         customTerminals: settings.customTerminals ?? [],
       },
-      systemShells,
       hydrated: true,
     });
+  },
+
+  setSystemShells(shells) {
+    set({ systemShells: shells });
   },
 
   updateSettings(settings) {

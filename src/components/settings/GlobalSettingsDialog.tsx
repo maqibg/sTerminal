@@ -17,6 +17,7 @@ import {
 interface GlobalSettingsDialogProps {
   settings: AppSettings;
   systemShells: ShellInfo[];
+  onDetectSystemShells: () => Promise<ShellInfo[]>;
   onCancel: () => void;
   onSave: (settings: AppSettings) => Promise<void>;
 }
@@ -28,6 +29,7 @@ function systemTerminalId(shell: ShellInfo): string {
 export function GlobalSettingsDialog({
   settings,
   systemShells,
+  onDetectSystemShells,
   onCancel,
   onSave,
 }: GlobalSettingsDialogProps) {
@@ -42,6 +44,7 @@ export function GlobalSettingsDialog({
   );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [detecting, setDetecting] = useState(false);
 
   useEffect(() => {
     setDefaultTerminalId(settings.defaultTerminalId);
@@ -157,6 +160,23 @@ export function GlobalSettingsDialog({
     }
   }
 
+  async function handleDetectSystemShells() {
+    try {
+      setDetecting(true);
+      setError("");
+      const shells = await onDetectSystemShells();
+      const currentDefaultId = defaultTerminalId;
+      if (!currentDefaultId && shells.length > 0) {
+        const systemDefault = shells.find((shell) => shell.isDefault) ?? shells[0];
+        setDefaultTerminalId(systemTerminalId(systemDefault));
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setDetecting(false);
+    }
+  }
+
   return (
     <div
       style={overlayStyle}
@@ -206,24 +226,37 @@ export function GlobalSettingsDialog({
           <div style={sectionStyle}>
             <div style={sectionHeaderStyle}>
               <h4 style={sectionTitleStyle}>系统终端</h4>
+              <button
+                style={primaryActionBtnStyle}
+                onClick={handleDetectSystemShells}
+                disabled={detecting}
+              >
+                {detecting ? "检测中..." : "检测系统终端"}
+              </button>
             </div>
-            <div style={listStyle}>
-              {systemShells.map((shell) => {
-                const isSelected = defaultTerminalId === systemTerminalId(shell);
-                return (
-                  <div key={shell.path} style={itemCardStyle}>
-                    <div style={itemTopStyle}>
-                      <span style={itemNameStyle}>{shell.displayName}</span>
-                      <div style={badgeGroupStyle}>
-                        {shell.isDefault && <span style={badgeStyle}>系统默认</span>}
-                        {isSelected && <span style={primaryBadgeStyle}>当前默认</span>}
+            {systemShells.length === 0 ? (
+              <div style={emptyStyle}>
+                尚未检测系统终端。点击右侧“检测系统终端”后才会列出。
+              </div>
+            ) : (
+              <div style={listStyle}>
+                {systemShells.map((shell) => {
+                  const isSelected = defaultTerminalId === systemTerminalId(shell);
+                  return (
+                    <div key={shell.path} style={itemCardStyle}>
+                      <div style={itemTopStyle}>
+                        <span style={itemNameStyle}>{shell.displayName}</span>
+                        <div style={badgeGroupStyle}>
+                          {shell.isDefault && <span style={badgeStyle}>系统默认</span>}
+                          {isSelected && <span style={primaryBadgeStyle}>当前默认</span>}
+                        </div>
                       </div>
+                      <div style={pathTextStyle}>{shell.path}</div>
                     </div>
-                    <div style={pathTextStyle}>{shell.path}</div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div style={sectionStyle}>
