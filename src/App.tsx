@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import "./styles/global.css";
 import "./styles/terminal.css";
 import "./styles/tabbar.css";
@@ -6,12 +6,14 @@ import { TitleBar } from "./components/titlebar/TitleBar";
 import { LayoutRenderer } from "./components/layout/LayoutRenderer";
 import { SaveLayoutDialog } from "./components/layout-manager/SaveLayoutDialog";
 import { LayoutManagerDrawer } from "./components/layout-manager/LayoutManagerDrawer";
+import { AppSettingsDialog } from "./components/settings/AppSettingsDialog";
 import { Toast } from "./components/Toast";
 import { useLayoutStore } from "./store/layoutStore";
+import { useSettingsStore } from "./store/settingsStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { layoutUpdate } from "./ipc/layoutApi";
 import { collectLeaves } from "./utils/layoutTree";
-import type { LayoutNode } from "./types/layout";
+import type { LayoutNode, AppSettings } from "./types/layout";
 
 interface ToastState {
   id: number;
@@ -35,9 +37,19 @@ export function App() {
   const layoutDirty = useLayoutStore((s) => s.layoutDirty);
   const markLayoutClean = useLayoutStore((s) => s.markLayoutClean);
 
+  const appSettings = useSettingsStore((s) => s.settings);
+  const loadSettings = useSettingsStore((s) => s.loadSettings);
+  const updateSettings = useSettingsStore((s) => s.updateSettings);
+
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showLayoutManager, setShowLayoutManager] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [toasts, setToasts] = useState<ToastState[]>([]);
+
+  // 应用启动时加载设置
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   // 布局名称递增计数
   const [layoutNameCounter, setLayoutNameCounter] = useState(1);
@@ -89,6 +101,19 @@ export function App() {
     addToast(message, "warning");
   };
 
+  const handleSettingsSave = useCallback(
+    async (newSettings: AppSettings) => {
+      try {
+        await updateSettings(newSettings);
+        setShowSettings(false);
+        addToast("设置已保存", "success");
+      } catch (e) {
+        addToast("保存设置失败：" + String(e), "error");
+      }
+    },
+    [updateSettings, addToast]
+  );
+
   // 快捷键：操作当前焦点面板
   useKeyboardShortcuts({
     onSplitHorizontal: () => {
@@ -105,6 +130,7 @@ export function App() {
     },
     onSaveLayout: handleSaveLayout,
     onOpenLayoutManager: () => setShowLayoutManager(true),
+    onOpenSettings: () => setShowSettings(true),
     onFocusNext: () => {
       const leafIds = collectLeaves(layoutTree).map((l) => l.id);
       if (leafIds.length === 0) return;
@@ -131,12 +157,22 @@ export function App() {
     >
       <TitleBar
         onOpenLayoutManager={() => setShowLayoutManager(true)}
+        onOpenSettings={() => setShowSettings(true)}
         activeLayoutName={activeLayoutName}
       />
 
       <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
         <LayoutRenderer node={layoutTree} />
       </div>
+
+      {/* 设置弹窗 */}
+      {showSettings && (
+        <AppSettingsDialog
+          settings={appSettings}
+          onSave={handleSettingsSave}
+          onCancel={() => setShowSettings(false)}
+        />
+      )}
 
       {/* 保存布局弹窗 */}
       {showSaveDialog && (

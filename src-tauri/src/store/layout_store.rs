@@ -59,6 +59,9 @@ pub struct AppSettings {
     /// 默认 Shell 类型标识符
     #[serde(rename = "defaultShell")]
     pub default_shell: String,
+    /// 默认 Shell 可执行文件完整路径
+    #[serde(rename = "defaultShellPath", default)]
+    pub default_shell_path: String,
     /// 默认初始工作目录，空字符串使用 Home 目录
     #[serde(rename = "defaultWorkingDirectory")]
     pub default_working_directory: String,
@@ -67,7 +70,8 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         AppSettings {
-            default_shell: "powershell".to_string(),
+            default_shell: String::new(),
+            default_shell_path: String::new(),
             default_working_directory: String::new(),
         }
     }

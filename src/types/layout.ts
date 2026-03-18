@@ -111,6 +111,8 @@ export interface AppStore {
 export interface AppSettings {
   /** 默认 Shell 类型标识符，如 'powershell' | 'bash' */
   defaultShell: string;
+  /** 默认 Shell 可执行文件完整路径 */
+  defaultShellPath: string;
   /** 默认初始工作目录绝对路径，空字符串表示使用用户 Home 目录 */
   defaultWorkingDirectory: string;
 }

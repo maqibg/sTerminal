@@ -1,4 +1,5 @@
 import type { LayoutNode, TerminalLeaf, TerminalSession, SplitNode } from "../types/layout";
+import { useSettingsStore } from "../store/settingsStore";
 
 /**
  * 生成唯一面板 ID
@@ -174,16 +175,19 @@ export function duplicateNode(
 
 /**
  * 创建一个新的终端会话
+ * 未显式指定 shell 时，从全局设置读取默认值
  */
 export function createSession(
   name: string,
   config?: Partial<Pick<TerminalSession, "shellType" | "shellPath" | "workingDirectory" | "startupCommand">>
 ): TerminalSession {
+  const { settings } = useSettingsStore.getState();
+
   return {
     id: generateId(),
-    shellType: config?.shellType ?? "default",
-    shellPath: config?.shellPath ?? "",
-    workingDirectory: config?.workingDirectory ?? "",
+    shellType: config?.shellType ?? (settings.defaultShell || "default"),
+    shellPath: config?.shellPath ?? (settings.defaultShellPath || ""),
+    workingDirectory: config?.workingDirectory ?? (settings.defaultWorkingDirectory || ""),
     name,
     ...(config?.startupCommand ? { startupCommand: config.startupCommand } : {}),
   };

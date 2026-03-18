@@ -106,6 +106,9 @@ export const LayoutManagerDrawer: React.FC<LayoutManagerDrawerProps> = ({
             布局管理
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button onClick={fetchLayouts} style={refreshBtnStyle} title="刷新列表" disabled={loading}>
+              ↻
+            </button>
             {onNewLayout && (
               <button onClick={onNewLayout} style={newLayoutBtnStyle} title="将当前布局另存为新布局">
                 + 新建
@@ -187,6 +190,14 @@ const emptyStyle: React.CSSProperties = {
   color: "#666",
   fontSize: 13,
   padding: "40px 20px",
+};
+
+const refreshBtnStyle: React.CSSProperties = {
+  background: "transparent",
+  color: "#999",
+  fontSize: 15,
+  padding: "4px 6px",
+  cursor: "pointer",
 };
 
 const newLayoutBtnStyle: React.CSSProperties = {
