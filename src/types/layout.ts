@@ -1,4 +1,4 @@
-import type { CustomTerminalProfile } from "./terminal";
+import type { CustomTerminalProfile, ShellInfo } from "./terminal";
 
 /**
  * 单个终端会话
@@ -119,4 +119,6 @@ export interface AppSettings {
   defaultWorkingDirectory: string;
   /** 用户手动添加的终端列表 */
   customTerminals: CustomTerminalProfile[];
+  /** 最近一次手动检测到的系统终端快照 */
+  detectedSystemTerminals: ShellInfo[];
 }

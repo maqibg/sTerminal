@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultTerminalId: "",
   defaultWorkingDirectory: "",
   customTerminals: [],
+  detectedSystemTerminals: [],
 };
 
 function makeSystemTerminalId(shell: ShellInfo): string {
@@ -140,12 +141,15 @@ export const useAppSettingsStore = create<AppSettingsStoreState>((set) => ({
   hydrated: false,
 
   hydrate(settings) {
+    const nextSettings = {
+      ...DEFAULT_SETTINGS,
+      ...settings,
+      customTerminals: settings.customTerminals ?? [],
+      detectedSystemTerminals: settings.detectedSystemTerminals ?? [],
+    };
     set({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        ...settings,
-        customTerminals: settings.customTerminals ?? [],
-      },
+      settings: nextSettings,
+      systemShells: nextSettings.detectedSystemTerminals,
       hydrated: true,
     });
   },
@@ -155,12 +159,15 @@ export const useAppSettingsStore = create<AppSettingsStoreState>((set) => ({
   },
 
   updateSettings(settings) {
+    const nextSettings = {
+      ...DEFAULT_SETTINGS,
+      ...settings,
+      customTerminals: settings.customTerminals ?? [],
+      detectedSystemTerminals: settings.detectedSystemTerminals ?? [],
+    };
     set({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        ...settings,
-        customTerminals: settings.customTerminals ?? [],
-      },
+      settings: nextSettings,
+      systemShells: nextSettings.detectedSystemTerminals,
       hydrated: true,
     });
   },

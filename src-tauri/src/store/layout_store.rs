@@ -86,6 +86,9 @@ pub struct AppSettings {
     /// 用户自定义终端
     #[serde(rename = "customTerminals", default)]
     pub custom_terminals: Vec<CustomTerminalProfile>,
+    /// 最近一次手动检测到的系统终端快照
+    #[serde(rename = "detectedSystemTerminals", default)]
+    pub detected_system_terminals: Vec<crate::commands::terminal::ShellInfo>,
 }
 
 fn default_shell() -> String {
@@ -99,6 +102,7 @@ impl Default for AppSettings {
             default_terminal_id: String::new(),
             default_working_directory: String::new(),
             custom_terminals: Vec::new(),
+            detected_system_terminals: Vec::new(),
         }
     }
 }

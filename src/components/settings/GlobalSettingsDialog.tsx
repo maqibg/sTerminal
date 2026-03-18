@@ -103,6 +103,7 @@ export function GlobalSettingsDialog({
       defaultTerminalId: nextDefaultId,
       defaultWorkingDirectory: defaultWorkingDirectory.trim(),
       customTerminals: normalizedCustom,
+      detectedSystemTerminals: systemShells,
     };
 
     try {
