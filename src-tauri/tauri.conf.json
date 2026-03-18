@@ -1,6 +1,6 @@
 {
   "productName": "sTerminal",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "identifier": "com.sterminal.app",
   "build": {
     "beforeDevCommand": "npm run dev",

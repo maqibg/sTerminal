@@ -9,7 +9,10 @@ import { LayoutManagerDrawer } from "./components/layout-manager/LayoutManagerDr
 import { GlobalSettingsDialog } from "./components/settings/GlobalSettingsDialog";
 import { Toast } from "./components/Toast";
 import { useLayoutStore } from "./store/layoutStore";
-import { useAppSettingsStore } from "./store/appSettingsStore";
+import {
+  getResolvedDefaultTerminal,
+  useAppSettingsStore,
+} from "./store/appSettingsStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { layoutUpdate, settingsGet, settingsSave } from "./ipc/layoutApi";
 import { shellListAvailable } from "./ipc/terminalApi";
@@ -70,67 +73,38 @@ export function App() {
   useEffect(() => {
     settingsGet()
       .then((settings) => {
+        const initialTree = useLayoutStore.getState().layoutTree;
+        const leaves = collectLeaves(initialTree);
+        const firstLeaf = leaves[0];
+        const firstSession = firstLeaf?.tabs[0];
+
+        if (
+          leaves.length === 1 &&
+          firstLeaf &&
+          firstSession &&
+          !firstSession.shellPath &&
+          !firstSession.workingDirectory
+        ) {
+          const terminal = getResolvedDefaultTerminal(
+            settings,
+            settings.detectedSystemTerminals ?? []
+          );
+          if (terminal) {
+            updateTabConfig(firstLeaf.id, firstSession.id, {
+              shellType: terminal.shellType,
+              shellPath: terminal.path,
+              workingDirectory: terminal.startDirectory,
+            });
+          }
+        }
+
         hydrateAppSettings(settings);
       })
       .catch((err) => {
         addToast("加载全局设置失败：" + String(err), "error");
+        hydrateAppSettings(useAppSettingsStore.getState().settings);
       });
-  }, [addToast, hydrateAppSettings]);
-
-  useEffect(() => {
-    if (!settingsHydrated || activeLayoutId !== null) return;
-
-    const leaves = collectLeaves(layoutTree);
-    const firstLeaf = leaves[0];
-    const firstSession = firstLeaf?.tabs[0];
-    if (
-      leaves.length !== 1 ||
-      !firstLeaf ||
-      !firstSession ||
-      firstSession.shellPath ||
-      firstSession.workingDirectory
-    ) {
-      return;
-    }
-
-    const fallbackSystemShell =
-      systemShells.find((shell) => shell.isDefault) ?? systemShells[0];
-    const nextDefaultId =
-      appSettings.defaultTerminalId ||
-      (fallbackSystemShell
-        ? `system:${fallbackSystemShell.type}:${fallbackSystemShell.path.toLowerCase()}`
-        : "");
-    const customDefault = appSettings.customTerminals.find(
-      (terminal) => terminal.id === nextDefaultId
-    );
-    const selectedSystem = systemShells.find(
-      (shell) => `system:${shell.type}:${shell.path.toLowerCase()}` === nextDefaultId
-    );
-
-    if (customDefault) {
-      updateTabConfig(firstLeaf.id, firstSession.id, {
-        shellType: customDefault.shellType,
-        shellPath: customDefault.path,
-        workingDirectory:
-          customDefault.startDirectory || appSettings.defaultWorkingDirectory,
-      });
-    } else if (selectedSystem) {
-      updateTabConfig(firstLeaf.id, firstSession.id, {
-        shellType: selectedSystem.type,
-        shellPath: selectedSystem.path,
-        workingDirectory: appSettings.defaultWorkingDirectory,
-      });
-    }
-  }, [
-    activeLayoutId,
-    appSettings.customTerminals,
-    appSettings.defaultTerminalId,
-    appSettings.defaultWorkingDirectory,
-    layoutTree,
-    settingsHydrated,
-    systemShells,
-    updateTabConfig,
-  ]);
+  }, [addToast, hydrateAppSettings, updateTabConfig]);
 
   const handleSaveLayout = useCallback(async () => {
     if (activeLayoutId) {
@@ -235,7 +209,7 @@ export function App() {
       />
 
       <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
-        <LayoutRenderer node={layoutTree} />
+        {settingsHydrated ? <LayoutRenderer node={layoutTree} /> : null}
       </div>
 
       {/* 保存布局弹窗 */}
