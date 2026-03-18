@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 
@@ -91,6 +92,19 @@ impl LayoutStore {
         Ok(LayoutStore { app: app.clone() })
     }
 
+    /// 将持久化文件固定到可执行文件同级的 data 目录。
+    fn resolve_store_path() -> Result<PathBuf, String> {
+        let exe_path =
+            std::env::current_exe().map_err(|e| format!("Failed to resolve current exe: {}", e))?;
+        let exe_dir = exe_path
+            .parent()
+            .ok_or_else(|| format!("Executable has no parent directory: {}", exe_path.display()))?;
+        let data_dir = exe_dir.join("data");
+        std::fs::create_dir_all(&data_dir)
+            .map_err(|e| format!("Failed to create data directory '{}': {}", data_dir.display(), e))?;
+        Ok(data_dir.join(STORE_FILE))
+    }
+
     // ----------------------------------------------------------
     // 内部辅助方法
     // ----------------------------------------------------------
@@ -99,7 +113,7 @@ impl LayoutStore {
     fn read_layouts(&self) -> Result<Vec<SavedLayout>, String> {
         let store = self
             .app
-            .store(STORE_FILE)
+            .store(Self::resolve_store_path()?)
             .map_err(|e| format!("Failed to open store: {}", e))?;
         match store.get(LAYOUTS_KEY) {
             Some(v) => serde_json::from_value(v).map_err(|e| format!("Failed to parse layouts: {}", e)),
@@ -111,7 +125,7 @@ impl LayoutStore {
     fn write_layouts(&self, layouts: &[SavedLayout]) -> Result<(), String> {
         let store = self
             .app
-            .store(STORE_FILE)
+            .store(Self::resolve_store_path()?)
             .map_err(|e| format!("Failed to open store: {}", e))?;
         let value = serde_json::to_value(layouts).map_err(|e| format!("Serialization error: {}", e))?;
         store.set(LAYOUTS_KEY, value);
@@ -254,7 +268,7 @@ impl LayoutStore {
     pub async fn get_settings(&self) -> Result<AppSettings, String> {
         let store = self
             .app
-            .store(STORE_FILE)
+            .store(Self::resolve_store_path()?)
             .map_err(|e| format!("Failed to open store: {}", e))?;
         match store.get(SETTINGS_KEY) {
             Some(v) => serde_json::from_value(v)
@@ -267,7 +281,7 @@ impl LayoutStore {
     pub async fn save_settings(&self, settings: AppSettings) -> Result<(), String> {
         let store = self
             .app
-            .store(STORE_FILE)
+            .store(Self::resolve_store_path()?)
             .map_err(|e| format!("Failed to open store: {}", e))?;
         let value = serde_json::to_value(&settings)
             .map_err(|e| format!("Serialization error: {}", e))?;
