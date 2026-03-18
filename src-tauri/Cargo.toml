@@ -5,7 +5,7 @@ description = "sTerminal - 多面板本地终端模拟器"
 authors = ["sTerminal Team"]
 license = "MIT"
 repository = ""
-default-run = "s-terminal"
+default-run = "sTerminal"
 edition = "2021"
 rust-version = "1.77.2"
 
@@ -16,7 +16,7 @@ name = "s_terminal_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [[bin]]
-name = "s-terminal"
+name = "sTerminal"
 path = "src/main.rs"
 
 [build-dependencies]
