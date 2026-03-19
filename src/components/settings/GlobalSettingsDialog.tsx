@@ -6,6 +6,7 @@ import type {
 } from "../../types/terminal";
 import {
   createEmptyCustomTerminal,
+  DEFAULT_TERMINAL_FONT_FAMILY,
   getTerminalOptions,
   inferShellType,
 } from "../../store/appSettingsStore";
@@ -22,8 +23,6 @@ interface GlobalSettingsDialogProps {
   onCancel: () => void;
   onSave: (settings: AppSettings) => Promise<void>;
 }
-
-const CUSTOM_FONT_VALUE = "__custom__";
 
 function systemTerminalId(shell: ShellInfo): string {
   return `system:${shell.type}:${shell.path.toLowerCase()}`;
@@ -42,17 +41,14 @@ export function GlobalSettingsDialog({
   const [defaultWorkingDirectory, setDefaultWorkingDirectory] = useState(
     settings.defaultWorkingDirectory
   );
-  const [terminalFontFamilyInput, setTerminalFontFamilyInput] = useState(
+  const [terminalFontFamily, setTerminalFontFamily] = useState(
     settings.terminalFontFamily
   );
   const [availableFonts, setAvailableFonts] = useState<string[]>(
     settings.detectedTerminalFonts
   );
-  const [terminalFontPreset, setTerminalFontPreset] = useState(() => {
-    return settings.detectedTerminalFonts.includes(settings.terminalFontFamily)
-      ? settings.terminalFontFamily
-      : CUSTOM_FONT_VALUE;
-  });
+  const [fontQuery, setFontQuery] = useState("");
+  const [fontDropdownOpen, setFontDropdownOpen] = useState(false);
   const [terminalFontSize, setTerminalFontSize] = useState(
     String(settings.terminalFontSize)
   );
@@ -67,13 +63,10 @@ export function GlobalSettingsDialog({
   useEffect(() => {
     setDefaultTerminalId(settings.defaultTerminalId);
     setDefaultWorkingDirectory(settings.defaultWorkingDirectory);
-    setTerminalFontFamilyInput(settings.terminalFontFamily);
+    setTerminalFontFamily(settings.terminalFontFamily);
     setAvailableFonts(settings.detectedTerminalFonts);
-    setTerminalFontPreset(
-      settings.detectedTerminalFonts.includes(settings.terminalFontFamily)
-        ? settings.terminalFontFamily
-        : CUSTOM_FONT_VALUE
-    );
+    setFontQuery("");
+    setFontDropdownOpen(false);
     setTerminalFontSize(String(settings.terminalFontSize));
     setCustomTerminals(settings.customTerminals);
     setError("");
@@ -83,6 +76,17 @@ export function GlobalSettingsDialog({
     () => getTerminalOptions({ ...settings, customTerminals, defaultTerminalId, defaultWorkingDirectory }, systemShells),
     [settings, customTerminals, defaultTerminalId, defaultWorkingDirectory, systemShells]
   );
+
+  const filteredFonts = useMemo(() => {
+    const keyword = fontQuery.trim().toLowerCase();
+    if (!keyword) return availableFonts;
+    return availableFonts.filter((font) => font.toLowerCase().includes(keyword));
+  }, [availableFonts, fontQuery]);
+
+  const displayFontLabel =
+    terminalFontFamily === DEFAULT_TERMINAL_FONT_FAMILY
+      ? "默认字体（Cascadia Code 优先）"
+      : terminalFontFamily;
 
   async function handleSave() {
     const normalizedCustom = customTerminals.map((terminal) => ({
@@ -118,12 +122,8 @@ export function GlobalSettingsDialog({
       return;
     }
 
-    const terminalFontFamily =
-      terminalFontPreset === CUSTOM_FONT_VALUE
-        ? terminalFontFamilyInput.trim()
-        : terminalFontPreset;
     if (!terminalFontFamily) {
-      setError("请选择终端字体，或填写自定义字体。");
+      setError("请选择终端字体。");
       return;
     }
 
@@ -143,7 +143,7 @@ export function GlobalSettingsDialog({
       defaultShell: selectedOption?.shellType ?? settings.defaultShell,
       defaultTerminalId: nextDefaultId,
       defaultWorkingDirectory: defaultWorkingDirectory.trim(),
-      terminalFontFamily,
+      terminalFontFamily: terminalFontFamily.trim(),
       terminalFontSize: parsedFontSize,
       detectedTerminalFonts: availableFonts,
       customTerminals: normalizedCustom,
@@ -229,10 +229,10 @@ export function GlobalSettingsDialog({
       const fonts = await terminalListFonts();
       setAvailableFonts(fonts);
       if (
-        terminalFontPreset !== CUSTOM_FONT_VALUE &&
-        !fonts.includes(terminalFontPreset)
+        terminalFontFamily !== DEFAULT_TERMINAL_FONT_FAMILY &&
+        !fonts.includes(terminalFontFamily)
       ) {
-        setTerminalFontPreset(CUSTOM_FONT_VALUE);
+        setTerminalFontFamily(DEFAULT_TERMINAL_FONT_FAMILY);
       }
     } catch (err) {
       setError(String(err));
@@ -294,45 +294,88 @@ export function GlobalSettingsDialog({
                 ? `已获取 ${availableFonts.length} 个系统字体`
                 : "尚未获取系统字体"}
             </div>
-            <button
-              style={primaryActionBtnStyle}
-              onClick={handleDetectFonts}
-              disabled={detectingFonts}
-            >
-              {detectingFonts ? "获取中..." : "获取系统字体"}
-            </button>
+            <div style={fontActionRowStyle}>
+              <button
+                style={secondaryActionBtnStyle}
+                onClick={() => {
+                  setTerminalFontFamily(DEFAULT_TERMINAL_FONT_FAMILY);
+                  setFontQuery("");
+                  setFontDropdownOpen(false);
+                }}
+              >
+                恢复默认
+              </button>
+              <button
+                style={primaryActionBtnStyle}
+                onClick={handleDetectFonts}
+                disabled={detectingFonts}
+              >
+                {detectingFonts ? "获取中..." : "获取系统字体"}
+              </button>
+            </div>
           </div>
-          <select
-            value={terminalFontPreset}
-            onChange={(event) => {
-              const value = event.target.value;
-              setTerminalFontPreset(value);
-              if (value !== CUSTOM_FONT_VALUE) {
-                setTerminalFontFamilyInput(value);
-              }
-            }}
-            style={selectStyle}
-          >
-            {availableFonts.length === 0 ? (
-              <option value={CUSTOM_FONT_VALUE}>请先获取系统字体</option>
-            ) : null}
-            {availableFonts.map((font) => (
-              <option key={font} value={font}>
-                {font}
-              </option>
-            ))}
-            <option value={CUSTOM_FONT_VALUE}>自定义...</option>
-          </select>
-
-          {terminalFontPreset === CUSTOM_FONT_VALUE && (
+          <div style={fontPickerWrapStyle}>
             <input
               type="text"
-              value={terminalFontFamilyInput}
-              onChange={(event) => setTerminalFontFamilyInput(event.target.value)}
-              placeholder='例如 "Sarasa Mono SC", Consolas, monospace'
+              value={fontDropdownOpen ? fontQuery : displayFontLabel}
+              onFocus={() => {
+                if (availableFonts.length > 0) {
+                  setFontDropdownOpen(true);
+                  setFontQuery("");
+                }
+              }}
+              onChange={(event) => {
+                setFontDropdownOpen(true);
+                setFontQuery(event.target.value);
+              }}
+              onBlur={() => {
+                setTimeout(() => {
+                  setFontDropdownOpen(false);
+                  setFontQuery("");
+                }, 120);
+              }}
+              placeholder={
+                availableFonts.length > 0 ? "搜索并选择字体" : "请先获取系统字体"
+              }
               style={inputStyle}
+              readOnly={availableFonts.length === 0}
             />
-          )}
+            {fontDropdownOpen && availableFonts.length > 0 && (
+              <div style={fontDropdownStyle}>
+                <button
+                  style={fontOptionStyle(
+                    terminalFontFamily === DEFAULT_TERMINAL_FONT_FAMILY
+                  )}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    setTerminalFontFamily(DEFAULT_TERMINAL_FONT_FAMILY);
+                    setFontDropdownOpen(false);
+                    setFontQuery("");
+                  }}
+                >
+                  默认字体（Cascadia Code 优先）
+                </button>
+                {filteredFonts.length === 0 ? (
+                  <div style={fontEmptyStyle}>没有匹配的字体</div>
+                ) : (
+                  filteredFonts.map((font) => (
+                    <button
+                      key={font}
+                      style={fontOptionStyle(terminalFontFamily === font)}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        setTerminalFontFamily(font);
+                        setFontDropdownOpen(false);
+                        setFontQuery("");
+                      }}
+                    >
+                      {font}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
 
           <label style={labelStyle}>终端字号</label>
           <input
@@ -569,6 +612,16 @@ const fontHintStyle: React.CSSProperties = {
   color: "#9ca3af",
 };
 
+const fontActionRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+};
+
+const fontPickerWrapStyle: React.CSSProperties = {
+  position: "relative",
+  marginBottom: 12,
+};
+
 const labelStyle: React.CSSProperties = {
   display: "block",
   fontSize: 12,
@@ -590,6 +643,37 @@ const inputStyle: React.CSSProperties = {
 
 const selectStyle: React.CSSProperties = {
   ...inputStyle,
+};
+
+const fontDropdownStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 40,
+  left: 0,
+  right: 0,
+  maxHeight: 260,
+  overflowY: "auto",
+  border: "1px solid #444",
+  borderRadius: 6,
+  background: "#151515",
+  zIndex: 2,
+  padding: 6,
+  boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+};
+
+const fontOptionStyle = (active: boolean): React.CSSProperties => ({
+  width: "100%",
+  textAlign: "left",
+  padding: "8px 10px",
+  borderRadius: 4,
+  background: active ? "#2563eb" : "transparent",
+  color: active ? "#fff" : "#e5e7eb",
+  fontSize: 13,
+});
+
+const fontEmptyStyle: React.CSSProperties = {
+  padding: "8px 10px",
+  color: "#9ca3af",
+  fontSize: 12,
 };
 
 const inlineRowStyle: React.CSSProperties = {
@@ -674,6 +758,11 @@ const primaryActionBtnStyle: React.CSSProperties = {
   background: "#2563eb",
   color: "#fff",
   fontSize: 12,
+};
+
+const secondaryActionBtnStyle: React.CSSProperties = {
+  ...primaryActionBtnStyle,
+  background: "#333",
 };
 
 const emptyStyle: React.CSSProperties = {

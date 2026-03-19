@@ -6,13 +6,17 @@ import type {
   TerminalOption,
 } from "../types/terminal";
 
+export const DEFAULT_TERMINAL_FONT_FAMILY =
+  '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, "Courier New", monospace';
+
+export const DEFAULT_TERMINAL_FONT_SIZE = 13;
+
 const DEFAULT_SETTINGS: AppSettings = {
   defaultShell: "powershell",
   defaultTerminalId: "",
   defaultWorkingDirectory: "",
-  terminalFontFamily:
-    '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, "Courier New", monospace',
-  terminalFontSize: 13,
+  terminalFontFamily: DEFAULT_TERMINAL_FONT_FAMILY,
+  terminalFontSize: DEFAULT_TERMINAL_FONT_SIZE,
   detectedTerminalFonts: [],
   customTerminals: [],
   detectedSystemTerminals: [],
