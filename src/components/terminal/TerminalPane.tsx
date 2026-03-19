@@ -8,8 +8,9 @@ import { DropOverlay, type DropZone } from "../DropOverlay";
 import { useLayoutStore } from "../../store/layoutStore";
 import { countLeaves } from "../../utils/layoutTree";
 import { destroyTerminal, getTerminal } from "../../terminal/terminalInstances";
-import { terminalGetCwd } from "../../ipc/terminalApi";
+import { terminalGetCwd, terminalWrite } from "../../ipc/terminalApi";
 import { getDragPayload, endDrag } from "../../utils/tabDragState";
+import { useConfirm } from "../../hooks/useConfirm";
 
 const DRAG_MIME = "application/sterminal-tab";
 
@@ -132,6 +133,7 @@ function zoneToSplitParams(zone: DropZone) {
 }
 
 export const TerminalPane: React.FC<TerminalPaneProps> = ({ leaf }) => {
+  const [confirm, ConfirmPortal] = useConfirm();
   const [contextMenu, setContextMenu] = useState<
     (ContextMenuState & TerminalMethods) | null
   >(null);
@@ -327,8 +329,21 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({ leaf }) => {
           onSettings={() => setShowSettings(true)}
           onClose={() => closePanel(leaf.id)}
           onDismiss={() => setContextMenu(null)}
+          onConfirm={(message) =>
+            confirm({ title: "关闭面板", message, kind: "danger" })
+          }
+          onPasteCommand={(command) => {
+            const managed = getTerminal(activeSession.id);
+            if (managed?.terminalId) {
+              terminalWrite(
+                managed.terminalId,
+                new TextEncoder().encode(command)
+              ).catch(console.error);
+            }
+          }}
         />
       )}
+      <ConfirmPortal />
     </div>
   );
 };

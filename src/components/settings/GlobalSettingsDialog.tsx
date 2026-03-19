@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import type { AppSettings } from "../../types/layout";
 import type {
   CustomTerminalProfile,
@@ -15,6 +16,8 @@ import {
   terminalPickExecutable,
   terminalListFonts,
 } from "../../ipc/terminalApi";
+
+declare const __APP_VERSION__: string;
 
 interface GlobalSettingsDialogProps {
   settings: AppSettings;
@@ -52,6 +55,10 @@ export function GlobalSettingsDialog({
   const [terminalFontSize, setTerminalFontSize] = useState(
     String(settings.terminalFontSize)
   );
+  const [enableRightClickCommandPaste, setEnableRightClickCommandPaste] = useState(
+    settings.enableRightClickCommandPaste
+  );
+  const [appVersion, setAppVersion] = useState(__APP_VERSION__);
   const [customTerminals, setCustomTerminals] = useState<CustomTerminalProfile[]>(
     settings.customTerminals
   );
@@ -68,9 +75,29 @@ export function GlobalSettingsDialog({
     setFontQuery("");
     setFontDropdownOpen(false);
     setTerminalFontSize(String(settings.terminalFontSize));
+    setEnableRightClickCommandPaste(settings.enableRightClickCommandPaste);
     setCustomTerminals(settings.customTerminals);
     setError("");
   }, [settings]);
+
+  useEffect(() => {
+    let active = true;
+    getVersion()
+      .then((version) => {
+        if (active && version) {
+          setAppVersion(version);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setAppVersion(__APP_VERSION__);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const terminalOptions = useMemo(
     () => getTerminalOptions({ ...settings, customTerminals, defaultTerminalId, defaultWorkingDirectory }, systemShells),
@@ -148,6 +175,8 @@ export function GlobalSettingsDialog({
       detectedTerminalFonts: availableFonts,
       customTerminals: normalizedCustom,
       detectedSystemTerminals: systemShells,
+      commandGroups: settings.commandGroups,
+      enableRightClickCommandPaste,
     };
 
     try {
@@ -255,6 +284,7 @@ export function GlobalSettingsDialog({
             <p style={subtitleStyle}>
               自动识别系统终端，可新增自定义终端，并设置默认终端。
             </p>
+            <div style={versionStyle}>当前版本 v{appVersion}</div>
           </div>
         </div>
 
@@ -388,6 +418,15 @@ export function GlobalSettingsDialog({
             placeholder="13"
             style={inputStyle}
           />
+
+          <label style={checkboxRowStyle}>
+            <input
+              type="checkbox"
+              checked={enableRightClickCommandPaste}
+              onChange={(event) => setEnableRightClickCommandPaste(event.target.checked)}
+            />
+            <span>启用右键一键粘贴常用命令</span>
+          </label>
 
           <div style={sectionStyle}>
             <div style={sectionHeaderStyle}>
@@ -585,6 +624,18 @@ const subtitleStyle: React.CSSProperties = {
   color: "#9ca3af",
 };
 
+const versionStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  marginTop: 10,
+  padding: "4px 10px",
+  borderRadius: 999,
+  background: "#1f2937",
+  color: "#bfdbfe",
+  fontSize: 12,
+  fontWeight: 600,
+};
+
 const bodyStyle: React.CSSProperties = {
   padding: 24,
   overflowY: "auto",
@@ -681,6 +732,15 @@ const inlineRowStyle: React.CSSProperties = {
   gap: 8,
   alignItems: "center",
   marginBottom: 12,
+};
+
+const checkboxRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 16,
+  fontSize: 13,
+  color: "#e5e7eb",
 };
 
 const browseBtnStyle: React.CSSProperties = {

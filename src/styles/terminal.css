@@ -185,6 +185,20 @@
   background: var(--hover-overlay);
 }
 
+.terminal-context-menu__item--disabled {
+  color: var(--text-muted);
+  cursor: default;
+  pointer-events: none;
+}
+
+.terminal-context-menu__group-label {
+  padding: 4px 10px 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  user-select: none;
+}
+
 .terminal-context-menu__shortcut {
   margin-left: auto;
   font-size: 11px;

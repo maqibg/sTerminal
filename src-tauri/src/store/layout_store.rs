@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 
+use crate::store::app_settings::AppSettings;
+
 /// config.json 在 tauri-plugin-store 中的存储键
 const STORE_FILE: &str = "config.json";
 const LAYOUTS_KEY: &str = "layouts";
@@ -52,80 +54,6 @@ pub struct SavedLayoutMeta {
     /// 布局包含的终端面板数量
     #[serde(rename = "panelCount")]
     pub panel_count: u32,
-}
-
-/// 应用设置，对应前端 AppSettings
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CustomTerminalProfile {
-    /// 自定义终端唯一 ID
-    pub id: String,
-    /// 显示名称
-    pub name: String,
-    /// Shell 类型标识符
-    #[serde(rename = "shellType")]
-    pub shell_type: String,
-    /// 可执行文件路径
-    pub path: String,
-    /// 启动目录
-    #[serde(rename = "startDirectory", default)]
-    pub start_directory: String,
-}
-
-/// 应用设置，对应前端 AppSettings
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppSettings {
-    /// 默认 Shell 类型标识符
-    #[serde(rename = "defaultShell", default = "default_shell")]
-    pub default_shell: String,
-    /// 默认终端稳定 ID
-    #[serde(rename = "defaultTerminalId", default)]
-    pub default_terminal_id: String,
-    /// 默认初始工作目录，空字符串使用 Home 目录
-    #[serde(rename = "defaultWorkingDirectory", default)]
-    pub default_working_directory: String,
-    /// 终端字体
-    #[serde(rename = "terminalFontFamily", default = "default_terminal_font_family")]
-    pub terminal_font_family: String,
-    /// 终端字号
-    #[serde(rename = "terminalFontSize", default = "default_terminal_font_size")]
-    pub terminal_font_size: u16,
-    /// 最近一次获取到的系统字体列表
-    #[serde(rename = "detectedTerminalFonts", default)]
-    pub detected_terminal_fonts: Vec<String>,
-    /// 用户自定义终端
-    #[serde(rename = "customTerminals", default)]
-    pub custom_terminals: Vec<CustomTerminalProfile>,
-    /// 最近一次手动检测到的系统终端快照
-    #[serde(rename = "detectedSystemTerminals", default)]
-    pub detected_system_terminals: Vec<crate::commands::terminal::ShellInfo>,
-}
-
-fn default_shell() -> String {
-    "powershell".to_string()
-}
-
-fn default_terminal_font_family() -> String {
-    "\"Cascadia Code\", \"Fira Code\", \"JetBrains Mono\", Consolas, \"Courier New\", monospace"
-        .to_string()
-}
-
-fn default_terminal_font_size() -> u16 {
-    13
-}
-
-impl Default for AppSettings {
-    fn default() -> Self {
-        AppSettings {
-            default_shell: default_shell(),
-            default_terminal_id: String::new(),
-            default_working_directory: String::new(),
-            terminal_font_family: default_terminal_font_family(),
-            terminal_font_size: default_terminal_font_size(),
-            detected_terminal_fonts: Vec::new(),
-            custom_terminals: Vec::new(),
-            detected_system_terminals: Vec::new(),
-        }
-    }
 }
 
 // ============================================================

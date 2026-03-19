@@ -1,5 +1,9 @@
 import { create } from "zustand";
-import type { AppSettings, TerminalSession } from "../types/layout";
+import type {
+  AppSettings,
+  CommandGroup,
+  TerminalSession,
+} from "../types/layout";
 import type {
   CustomTerminalProfile,
   ShellInfo,
@@ -20,6 +24,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   detectedTerminalFonts: [],
   customTerminals: [],
   detectedSystemTerminals: [],
+  commandGroups: [],
+  enableRightClickCommandPaste: false,
 };
 
 function makeSystemTerminalId(shell: ShellInfo): string {
@@ -163,6 +169,7 @@ export const useAppSettingsStore = create<AppSettingsStoreState>((set) => ({
       detectedTerminalFonts: settings.detectedTerminalFonts ?? [],
       customTerminals: settings.customTerminals ?? [],
       detectedSystemTerminals: settings.detectedSystemTerminals ?? [],
+      commandGroups: settings.commandGroups ?? [],
     };
     set({
       settings: nextSettings,
@@ -182,6 +189,7 @@ export const useAppSettingsStore = create<AppSettingsStoreState>((set) => ({
       detectedTerminalFonts: settings.detectedTerminalFonts ?? [],
       customTerminals: settings.customTerminals ?? [],
       detectedSystemTerminals: settings.detectedSystemTerminals ?? [],
+      commandGroups: settings.commandGroups ?? [],
     };
     set({
       settings: nextSettings,
@@ -198,5 +206,13 @@ export function createEmptyCustomTerminal(): CustomTerminalProfile {
     shellType: "custom",
     path: "",
     startDirectory: "",
+  };
+}
+
+export function createEmptyCommandGroup(): CommandGroup {
+  return {
+    id: crypto.randomUUID(),
+    name: "新分组",
+    commands: [],
   };
 }

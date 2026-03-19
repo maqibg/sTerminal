@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import type { SavedLayoutMeta, LayoutNode } from "../../types/layout";
 import { layoutList, layoutLoad } from "../../ipc/layoutApi";
 import { LayoutListItem } from "./LayoutListItem";
+import { useConfirm } from "../../hooks/useConfirm";
 
 interface LayoutManagerDrawerProps {
   open: boolean;
@@ -10,6 +11,7 @@ interface LayoutManagerDrawerProps {
   onLayoutLoad: (tree: LayoutNode, layoutId: string, layoutName: string) => void;
   /** 工作目录警告 Toast 触发 */
   onWorkdirWarning?: (message: string) => void;
+  onError?: (message: string) => void;
   /** 当前绑定的布局 ID */
   activeLayoutId?: string | null;
   /** 布局是否有未保存的修改 */
@@ -26,13 +28,15 @@ export const LayoutManagerDrawer: React.FC<LayoutManagerDrawerProps> = ({
   open,
   onClose,
   onLayoutLoad,
-  onWorkdirWarning,
+  onWorkdirWarning: _onWorkdirWarning,
+  onError,
   activeLayoutId,
   layoutDirty,
   onSaveLayout,
   onNewLayout,
   refreshTrigger,
 }) => {
+  const [confirm, ConfirmPortal] = useConfirm();
   const [layouts, setLayouts] = useState<SavedLayoutMeta[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -65,18 +69,14 @@ export const LayoutManagerDrawer: React.FC<LayoutManagerDrawerProps> = ({
   }, [open, onClose]);
 
   const handleLoad = async (layoutId: string) => {
-    const ok = confirm("加载布局将关闭当前所有面板，确认继续？");
+    const ok = await confirm({ title: "加载布局", message: "加载布局将关闭当前所有面板，确认继续？" });
     if (!ok) return;
     try {
       const saved = await layoutLoad(layoutId);
       onLayoutLoad(saved.tree, saved.id, saved.name);
       onClose();
-      // 检查工作目录是否存在由后端处理，前端可通过事件获知
-      if (onWorkdirWarning) {
-        // 工作目录检查已在后端执行，此处预留接口
-      }
     } catch (e) {
-      alert("加载布局失败：" + String(e));
+      onError?.("加载布局失败：" + String(e));
     }
   };
 
@@ -106,6 +106,9 @@ export const LayoutManagerDrawer: React.FC<LayoutManagerDrawerProps> = ({
             布局管理
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button onClick={fetchLayouts} style={refreshBtnStyle} title="刷新列表" disabled={loading}>
+              ↻
+            </button>
             {onNewLayout && (
               <button onClick={onNewLayout} style={newLayoutBtnStyle} title="将当前布局另存为新布局">
                 + 新建
@@ -137,10 +140,13 @@ export const LayoutManagerDrawer: React.FC<LayoutManagerDrawerProps> = ({
               onSave={onSaveLayout}
               onDeleted={handleDeleted}
               onRenamed={handleRenamed}
+              onError={onError}
+              onConfirm={(message) => confirm({ title: "删除布局", message, kind: "danger" })}
             />
           ))}
         </div>
       </div>
+      <ConfirmPortal />
     </>
   );
 };
@@ -187,6 +193,14 @@ const emptyStyle: React.CSSProperties = {
   color: "#666",
   fontSize: 13,
   padding: "40px 20px",
+};
+
+const refreshBtnStyle: React.CSSProperties = {
+  background: "transparent",
+  color: "#999",
+  fontSize: 15,
+  padding: "4px 6px",
+  cursor: "pointer",
 };
 
 const newLayoutBtnStyle: React.CSSProperties = {

@@ -92,6 +92,18 @@ export interface SavedLayoutMeta {
   panelCount: number;
 }
 
+export interface CommonCommand {
+  id: string;
+  name: string;
+  command: string;
+}
+
+export interface CommandGroup {
+  id: string;
+  name: string;
+  commands: CommonCommand[];
+}
+
 /**
  * 持久化存储的完整数据结构（tauri-plugin-store 存储在 config.json）
  */
@@ -127,4 +139,8 @@ export interface AppSettings {
   customTerminals: CustomTerminalProfile[];
   /** 最近一次手动检测到的系统终端快照 */
   detectedSystemTerminals: ShellInfo[];
+  /** 常用命令分组 */
+  commandGroups: CommandGroup[];
+  /** 右键一键粘贴常用命令是否启用 */
+  enableRightClickCommandPaste: boolean;
 }

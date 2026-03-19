@@ -6,6 +6,8 @@ import { TitleBar } from "./components/titlebar/TitleBar";
 import { LayoutRenderer } from "./components/layout/LayoutRenderer";
 import { SaveLayoutDialog } from "./components/layout-manager/SaveLayoutDialog";
 import { LayoutManagerDrawer } from "./components/layout-manager/LayoutManagerDrawer";
+import { CommandManagerDrawer } from "./components/commands/CommandManagerDrawer";
+import { KeyboardShortcutsDialog } from "./components/KeyboardShortcutsDialog";
 import { GlobalSettingsDialog } from "./components/settings/GlobalSettingsDialog";
 import { Toast } from "./components/Toast";
 import { useLayoutStore } from "./store/layoutStore";
@@ -54,6 +56,8 @@ export function App() {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showLayoutManager, setShowLayoutManager] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
+  const [showCommandManager, setShowCommandManager] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [toasts, setToasts] = useState<ToastState[]>([]);
 
   // 布局名称递增计数
@@ -185,6 +189,8 @@ export function App() {
     },
     onSaveLayout: handleSaveLayout,
     onOpenLayoutManager: () => setShowLayoutManager(true),
+    onOpenSettings: () => setShowGlobalSettings(true),
+    onOpenCommandManager: () => setShowCommandManager(true),
     onFocusNext: () => {
       const leafIds = collectLeaves(layoutTree).map((l) => l.id);
       if (leafIds.length === 0) return;
@@ -212,6 +218,8 @@ export function App() {
       <TitleBar
         onOpenLayoutManager={() => setShowLayoutManager(true)}
         onOpenSettings={() => setShowGlobalSettings(true)}
+        onOpenCommandManager={() => setShowCommandManager(true)}
+        onOpenShortcuts={() => setShowShortcuts(true)}
         activeLayoutName={activeLayoutName}
       />
 
@@ -239,12 +247,22 @@ export function App() {
         />
       )}
 
+      {showShortcuts && (
+        <KeyboardShortcutsDialog onClose={() => setShowShortcuts(false)} />
+      )}
+
+      <CommandManagerDrawer
+        open={showCommandManager}
+        onClose={() => setShowCommandManager(false)}
+      />
+
       {/* 布局管理抽屉 */}
       <LayoutManagerDrawer
         open={showLayoutManager}
         onClose={() => setShowLayoutManager(false)}
         onLayoutLoad={handleLayoutLoad}
         onWorkdirWarning={handleWorkdirWarning}
+        onError={(message) => addToast(message, "error")}
         activeLayoutId={activeLayoutId}
         layoutDirty={layoutDirty}
         onSaveLayout={handleSaveLayout}

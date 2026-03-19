@@ -1,6 +1,7 @@
 use tauri::AppHandle;
 
-use crate::store::layout_store::{AppSettings, LayoutStore, SavedLayout, SavedLayoutMeta};
+use crate::store::app_settings::AppSettings;
+use crate::store::layout_store::{LayoutStore, SavedLayout, SavedLayoutMeta};
 
 /// 保存当前布局为命名布局记录
 ///

@@ -13,6 +13,8 @@ interface LayoutListItemProps {
   onSave?: () => void;
   onDeleted: (layoutId: string) => void;
   onRenamed: (layoutId: string, newName: string) => void;
+  onError?: (message: string) => void;
+  onConfirm?: (message: string) => Promise<boolean>;
 }
 
 /** 将 ISO 8601 时间戳格式化为 "YYYY-MM-DD HH:mm" */
@@ -34,6 +36,8 @@ export const LayoutListItem: React.FC<LayoutListItemProps> = ({
   onSave,
   onDeleted,
   onRenamed,
+  onError,
+  onConfirm,
 }) => {
   const [hovered, setHovered] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -58,12 +62,13 @@ export const LayoutListItem: React.FC<LayoutListItemProps> = ({
   };
 
   const handleDelete = async () => {
-    if (!confirm(`确认删除布局「${layout.name}」？`)) return;
+    const ok = onConfirm ? await onConfirm(`确认删除布局「${layout.name}」？`) : true;
+    if (!ok) return;
     try {
       await layoutDelete(layout.id);
       onDeleted(layout.id);
     } catch (e) {
-      alert("删除失败：" + String(e));
+      onError?.("删除失败：" + String(e));
     }
   };
 

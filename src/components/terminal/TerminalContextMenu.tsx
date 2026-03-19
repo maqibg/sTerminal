@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useAppSettingsStore } from "../../store/appSettingsStore";
 
 interface ContextMenuPosition {
   x: number;
@@ -16,6 +17,8 @@ interface TerminalContextMenuProps {
   onSettings: () => void;
   onClose: () => void;
   onDismiss: () => void;
+  onConfirm?: (message: string) => Promise<boolean>;
+  onPasteCommand?: (command: string) => void;
 }
 
 export const TerminalContextMenu: React.FC<TerminalContextMenuProps> = ({
@@ -29,7 +32,13 @@ export const TerminalContextMenu: React.FC<TerminalContextMenuProps> = ({
   onSettings,
   onClose,
   onDismiss,
+  onConfirm,
+  onPasteCommand,
 }) => {
+  const commandGroups = useAppSettingsStore((s) => s.settings.commandGroups ?? []);
+  const enableRightClickCommandPaste = useAppSettingsStore(
+    (s) => s.settings.enableRightClickCommandPaste
+  );
   const menuRef = useRef<HTMLDivElement>(null);
 
   // 点击外部关闭
@@ -59,10 +68,25 @@ export const TerminalContextMenu: React.FC<TerminalContextMenuProps> = ({
     onDismiss();
   };
 
+  const [adjusted, setAdjusted] = useState<ContextMenuPosition | null>(null);
+
+  useLayoutEffect(() => {
+    const element = menuRef.current;
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const x = position.x + rect.width > viewportWidth ? viewportWidth - rect.width - 4 : position.x;
+    const y = position.y + rect.height > viewportHeight ? viewportHeight - rect.height - 4 : position.y;
+    if (x !== position.x || y !== position.y) {
+      setAdjusted({ x: Math.max(0, x), y: Math.max(0, y) });
+    }
+  }, [position]);
+
   // 确保菜单不超出视口
   const style: React.CSSProperties = {
-    left: position.x,
-    top: position.y,
+    left: (adjusted ?? position).x,
+    top: (adjusted ?? position).y,
   };
 
   return (
@@ -110,14 +134,47 @@ export const TerminalContextMenu: React.FC<TerminalContextMenuProps> = ({
         className="terminal-context-menu__item"
         onClick={() => handleAction(onSettings)}
       >
-        ⚙ 终端设置
+        ⚙ 当前控制台设置
       </button>
+      {enableRightClickCommandPaste && onPasteCommand ? (
+        <>
+          <div className="terminal-context-menu__separator" />
+          {commandGroups.length === 0 ? (
+            <div className="terminal-context-menu__item terminal-context-menu__item--disabled">
+              暂无常用命令
+            </div>
+          ) : (
+            commandGroups.map((group) => (
+              <React.Fragment key={group.id}>
+                {group.commands.length > 0 ? (
+                  <>
+                    <div className="terminal-context-menu__group-label">{group.name}</div>
+                    {group.commands.map((command) => (
+                      <button
+                        key={command.id}
+                        className="terminal-context-menu__item"
+                        onClick={() => handleAction(() => onPasteCommand(command.command))}
+                        title={command.command}
+                      >
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          ⌘ {command.name}
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                ) : null}
+              </React.Fragment>
+            ))
+          )}
+        </>
+      ) : null}
       <div className="terminal-context-menu__separator" />
       <button
         className="terminal-context-menu__item terminal-context-menu__item--danger"
-        onClick={() => {
-          if (isLastPanel) {
-            if (!confirm("这是最后一个面板，确认关闭将退出应用，继续？")) {
+        onClick={async () => {
+          if (isLastPanel && onConfirm) {
+            const ok = await onConfirm("这是最后一个面板，确认关闭将退出应用，继续？");
+            if (!ok) {
               onDismiss();
               return;
             }
