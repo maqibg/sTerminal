@@ -8,6 +8,7 @@ import { SaveLayoutDialog } from "./components/layout-manager/SaveLayoutDialog";
 import { LayoutManagerDrawer } from "./components/layout-manager/LayoutManagerDrawer";
 import { AppSettingsDialog } from "./components/settings/AppSettingsDialog";
 import { CommandManagerDrawer } from "./components/commands/CommandManagerDrawer";
+import { KeyboardShortcutsDialog } from "./components/KeyboardShortcutsDialog";
 import { Toast } from "./components/Toast";
 import { useLayoutStore } from "./store/layoutStore";
 import { useSettingsStore } from "./store/settingsStore";
@@ -46,6 +47,7 @@ export function App() {
   const [showLayoutManager, setShowLayoutManager] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCommandManager, setShowCommandManager] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [toasts, setToasts] = useState<ToastState[]>([]);
 
   // 布局名称递增计数
@@ -163,6 +165,7 @@ export function App() {
         onOpenLayoutManager={() => setShowLayoutManager(true)}
         onOpenSettings={() => setShowSettings(true)}
         onOpenCommandManager={() => setShowCommandManager(true)}
+        onOpenShortcuts={() => setShowShortcuts(true)}
         activeLayoutName={activeLayoutName}
       />
 
@@ -187,6 +190,11 @@ export function App() {
           onSuccess={handleSaveSuccess}
           onCancel={() => setShowSaveDialog(false)}
         />
+      )}
+
+      {/* 快捷键弹窗 */}
+      {showShortcuts && (
+        <KeyboardShortcutsDialog onClose={() => setShowShortcuts(false)} />
       )}
 
       {/* 常用命令管理抽屉 */}

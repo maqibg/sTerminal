@@ -7,7 +7,7 @@ import { TerminalSettingsDialog } from "./TerminalSettingsDialog";
 import { DropOverlay, type DropZone } from "../DropOverlay";
 import { useLayoutStore } from "../../store/layoutStore";
 import { countLeaves } from "../../utils/layoutTree";
-import { destroyTerminal, getTerminal } from "../../terminal/terminalInstances";
+import { getTerminal } from "../../terminal/terminalInstances";
 import { terminalGetCwd, terminalWrite } from "../../ipc/terminalApi";
 import { getDragPayload, endDrag } from "../../utils/tabDragState";
 import { useConfirm } from "../../hooks/useConfirm";
@@ -167,19 +167,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({ leaf }) => {
       setShowSettings(false);
       if (Object.keys(config).length === 0) return;
 
-      const tabId = activeSession.id;
-      updateTabConfig(leaf.id, tabId, config);
-
-      // 判断是否需要重建终端
-      const needsRebuild =
-        "shellPath" in config ||
-        "shellType" in config ||
-        "workingDirectory" in config ||
-        "startupCommand" in config;
-
-      if (needsRebuild) {
-        destroyTerminal(tabId);
-      }
+      updateTabConfig(leaf.id, activeSession.id, config);
     },
     [activeSession.id, leaf.id, updateTabConfig]
   );

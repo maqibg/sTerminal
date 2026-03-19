@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSettingsStore } from "../../store/settingsStore";
 
 interface ContextMenuPosition {
@@ -66,9 +66,25 @@ export const TerminalContextMenu: React.FC<TerminalContextMenuProps> = ({
   };
 
   // 确保菜单不超出视口
+  const [adjusted, setAdjusted] = useState<{ x: number; y: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const x = position.x + rect.width > vw ? vw - rect.width - 4 : position.x;
+    const y = position.y + rect.height > vh ? vh - rect.height - 4 : position.y;
+    if (x !== position.x || y !== position.y) {
+      setAdjusted({ x: Math.max(0, x), y: Math.max(0, y) });
+    }
+  }, [position]);
+
+  const pos = adjusted ?? position;
   const style: React.CSSProperties = {
-    left: position.x,
-    top: position.y,
+    left: pos.x,
+    top: pos.y,
   };
 
   return (

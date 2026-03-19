@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/zss823158062/sTerminal"><img src="https://img.shields.io/badge/GitHub-sTerminal-181717?logo=github" alt="GitHub"></a>
   <img src="https://img.shields.io/badge/Tauri-2.x-blue" alt="Tauri">
   <img src="https://img.shields.io/badge/React-18-61dafb" alt="React">
   <img src="https://img.shields.io/badge/Rust-2021-orange" alt="Rust">
@@ -19,10 +20,12 @@
 
 ## 功能特性
 
-- **多面板分割** — 二叉树布局引擎，支持水平/竖直任意嵌套分割，拖拽分割线实时调整比例
+- **多面板分割** — 二叉树布局引擎，支持水平/垂直任意嵌套分割，拖拽分割线实时调整比例
 - **Tab 管理** — 每个面板可包含多个终端 Tab，支持拖拽排序、跨面板合并、重命名
 - **布局持久化** — 保存/加载命名布局（最多 50 条），一键覆盖保存或另存为新布局
 - **Shell 自动检测** — 自动识别系统可用 Shell（PowerShell、cmd、bash、zsh、fish 等）
+- **应用设置** — 默认 Shell 配置、单终端设置（Shell 类型、工作目录、启动命令）
+- **常用命令管理** — 分组管理常用命令，右键菜单一键粘贴到终端
 - **WebGL 渲染** — xterm.js WebGL 加速，流畅渲染大量终端输出
 - **自定义标题栏** — 无边框窗口，显示当前绑定的布局名称
 - **全局快捷键** — 分割、关闭、复制面板、保存布局、面板切换等
@@ -32,11 +35,13 @@
 | 快捷键 | 功能 |
 |--------|------|
 | `Ctrl+Shift+H` | 水平分割 |
-| `Ctrl+Shift+V` | 竖直分割 |
+| `Ctrl+Shift+V` | 垂直分割 |
 | `Ctrl+Shift+D` | 复制面板 |
 | `Ctrl+Shift+W` | 关闭面板 |
 | `Ctrl+Shift+S` | 保存布局 |
 | `Ctrl+Shift+L` | 布局管理 |
+| `Ctrl+Shift+P` | 常用命令 |
+| `Ctrl+,` | 打开设置 |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | 切换焦点面板 |
 
 ## 技术栈
@@ -59,9 +64,11 @@ sTerminal/
 │   │   ├── layout/               # 布局引擎（递归渲染、分割容器、拖拽手柄）
 │   │   ├── terminal/             # 终端面板、右键菜单、设置弹窗
 │   │   ├── layout-manager/       # 布局管理抽屉、列表项、保存弹窗
+│   │   ├── commands/             # 常用命令管理抽屉
+│   │   ├── settings/             # 应用设置弹窗
 │   │   └── titlebar/             # 自定义标题栏
 │   ├── hooks/                    # useTerminal、useKeyboardShortcuts、useResize
-│   ├── store/                    # Zustand store（layoutStore、panelStore）
+│   ├── store/                    # Zustand store（layoutStore、panelStore、settingsStore）
 │   ├── ipc/                      # Tauri IPC 封装（terminalApi、layoutApi）
 │   ├── types/                    # TypeScript 类型定义
 │   ├── utils/                    # 二叉树操作、Tab 拖拽状态机
