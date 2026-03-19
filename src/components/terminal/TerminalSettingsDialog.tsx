@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import type { TerminalSession } from "../../types/layout";
-import type { ShellInfo } from "../../types/terminal";
-import { shellListAvailable } from "../../ipc/terminalApi";
+import { useAppSettingsStore, getTerminalOptions } from "../../store/appSettingsStore";
 
 interface TerminalSettingsDialogProps {
   session: TerminalSession;
@@ -14,24 +13,24 @@ export const TerminalSettingsDialog: React.FC<TerminalSettingsDialogProps> = ({
   onApply,
   onCancel,
 }) => {
-  const [shells, setShells] = useState<ShellInfo[]>([]);
+  const appSettings = useAppSettingsStore((s) => s.settings);
+  const systemShells = useAppSettingsStore((s) => s.systemShells);
+  const shells = useMemo(
+    () => getTerminalOptions(appSettings, systemShells),
+    [appSettings, systemShells]
+  );
   const [selectedShellIdx, setSelectedShellIdx] = useState(-1);
   const [workingDirectory, setWorkingDirectory] = useState(session.workingDirectory);
   const [startupCommand, setStartupCommand] = useState(session.startupCommand ?? "");
   const [name, setName] = useState(session.name ?? "");
   const firstInputRef = useRef<HTMLSelectElement>(null);
 
-  // 加载 shell 列表
   useEffect(() => {
-    shellListAvailable().then((list) => {
-      setShells(list);
-      // 匹配当前 session 的 shell
-      const idx = list.findIndex(
-        (s) => s.path === session.shellPath || s.type === session.shellType
-      );
-      setSelectedShellIdx(idx >= 0 ? idx : 0);
-    }).catch(console.error);
-  }, [session.shellPath, session.shellType]);
+    const idx = shells.findIndex(
+      (s) => s.path === session.shellPath || s.shellType === session.shellType
+    );
+    setSelectedShellIdx(idx >= 0 ? idx : 0);
+  }, [shells, session.shellPath, session.shellType]);
 
   // ESC 关闭
   useEffect(() => {
@@ -44,15 +43,17 @@ export const TerminalSettingsDialog: React.FC<TerminalSettingsDialogProps> = ({
 
   // 自动聚焦
   useEffect(() => {
-    firstInputRef.current?.focus();
+    if (shells.length > 0) {
+      firstInputRef.current?.focus();
+    }
   }, [shells]);
 
   const handleApply = () => {
     const config: Partial<TerminalSession> = {};
     const shell = shells[selectedShellIdx];
 
-    if (shell && (shell.type !== session.shellType || shell.path !== session.shellPath)) {
-      config.shellType = shell.type;
+    if (shell && (shell.shellType !== session.shellType || shell.path !== session.shellPath)) {
+      config.shellType = shell.shellType;
       config.shellPath = shell.path;
     }
     if (workingDirectory !== session.workingDirectory) {
@@ -86,7 +87,9 @@ export const TerminalSettingsDialog: React.FC<TerminalSettingsDialogProps> = ({
         >
           {shells.map((s, i) => (
             <option key={s.path} value={i}>
-              {s.displayName}{s.isDefault ? " (默认)" : ""}
+              {s.name}
+              {s.source === "system" ? " (系统)" : " (自定义)"}
+              {s.isDefault ? " (默认)" : ""}
             </option>
           ))}
         </select>

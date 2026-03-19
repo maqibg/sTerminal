@@ -12,6 +12,7 @@ import {
 import {
   terminalPickDirectory,
   terminalPickExecutable,
+  terminalListFonts,
 } from "../../ipc/terminalApi";
 
 interface GlobalSettingsDialogProps {
@@ -21,6 +22,8 @@ interface GlobalSettingsDialogProps {
   onCancel: () => void;
   onSave: (settings: AppSettings) => Promise<void>;
 }
+
+const CUSTOM_FONT_VALUE = "__custom__";
 
 function systemTerminalId(shell: ShellInfo): string {
   return `system:${shell.type}:${shell.path.toLowerCase()}`;
@@ -39,16 +42,39 @@ export function GlobalSettingsDialog({
   const [defaultWorkingDirectory, setDefaultWorkingDirectory] = useState(
     settings.defaultWorkingDirectory
   );
+  const [terminalFontFamilyInput, setTerminalFontFamilyInput] = useState(
+    settings.terminalFontFamily
+  );
+  const [availableFonts, setAvailableFonts] = useState<string[]>(
+    settings.detectedTerminalFonts
+  );
+  const [terminalFontPreset, setTerminalFontPreset] = useState(() => {
+    return settings.detectedTerminalFonts.includes(settings.terminalFontFamily)
+      ? settings.terminalFontFamily
+      : CUSTOM_FONT_VALUE;
+  });
+  const [terminalFontSize, setTerminalFontSize] = useState(
+    String(settings.terminalFontSize)
+  );
   const [customTerminals, setCustomTerminals] = useState<CustomTerminalProfile[]>(
     settings.customTerminals
   );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [detecting, setDetecting] = useState(false);
+  const [detectingFonts, setDetectingFonts] = useState(false);
 
   useEffect(() => {
     setDefaultTerminalId(settings.defaultTerminalId);
     setDefaultWorkingDirectory(settings.defaultWorkingDirectory);
+    setTerminalFontFamilyInput(settings.terminalFontFamily);
+    setAvailableFonts(settings.detectedTerminalFonts);
+    setTerminalFontPreset(
+      settings.detectedTerminalFonts.includes(settings.terminalFontFamily)
+        ? settings.terminalFontFamily
+        : CUSTOM_FONT_VALUE
+    );
+    setTerminalFontSize(String(settings.terminalFontSize));
     setCustomTerminals(settings.customTerminals);
     setError("");
   }, [settings]);
@@ -86,6 +112,21 @@ export function GlobalSettingsDialog({
       return;
     }
 
+    const parsedFontSize = Number(terminalFontSize.trim());
+    if (!Number.isFinite(parsedFontSize) || parsedFontSize < 8 || parsedFontSize > 32) {
+      setError("终端字号必须是 8 到 32 之间的数字。");
+      return;
+    }
+
+    const terminalFontFamily =
+      terminalFontPreset === CUSTOM_FONT_VALUE
+        ? terminalFontFamilyInput.trim()
+        : terminalFontPreset;
+    if (!terminalFontFamily) {
+      setError("请选择终端字体，或填写自定义字体。");
+      return;
+    }
+
     const fallbackSystemId = systemShells[0] ? systemTerminalId(systemShells[0]) : "";
     const nextDefaultId =
       defaultTerminalId || normalizedCustom[0]?.id || fallbackSystemId;
@@ -102,6 +143,9 @@ export function GlobalSettingsDialog({
       defaultShell: selectedOption?.shellType ?? settings.defaultShell,
       defaultTerminalId: nextDefaultId,
       defaultWorkingDirectory: defaultWorkingDirectory.trim(),
+      terminalFontFamily,
+      terminalFontSize: parsedFontSize,
+      detectedTerminalFonts: availableFonts,
       customTerminals: normalizedCustom,
       detectedSystemTerminals: systemShells,
     };
@@ -178,6 +222,25 @@ export function GlobalSettingsDialog({
     }
   }
 
+  async function handleDetectFonts() {
+    try {
+      setDetectingFonts(true);
+      setError("");
+      const fonts = await terminalListFonts();
+      setAvailableFonts(fonts);
+      if (
+        terminalFontPreset !== CUSTOM_FONT_VALUE &&
+        !fonts.includes(terminalFontPreset)
+      ) {
+        setTerminalFontPreset(CUSTOM_FONT_VALUE);
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setDetectingFonts(false);
+    }
+  }
+
   return (
     <div
       style={overlayStyle}
@@ -223,6 +286,65 @@ export function GlobalSettingsDialog({
               浏览
             </button>
           </div>
+
+          <label style={labelStyle}>终端字体</label>
+          <div style={sectionHeaderStyle}>
+            <div style={fontHintStyle}>
+              {availableFonts.length > 0
+                ? `已获取 ${availableFonts.length} 个系统字体`
+                : "尚未获取系统字体"}
+            </div>
+            <button
+              style={primaryActionBtnStyle}
+              onClick={handleDetectFonts}
+              disabled={detectingFonts}
+            >
+              {detectingFonts ? "获取中..." : "获取系统字体"}
+            </button>
+          </div>
+          <select
+            value={terminalFontPreset}
+            onChange={(event) => {
+              const value = event.target.value;
+              setTerminalFontPreset(value);
+              if (value !== CUSTOM_FONT_VALUE) {
+                setTerminalFontFamilyInput(value);
+              }
+            }}
+            style={selectStyle}
+          >
+            {availableFonts.length === 0 ? (
+              <option value={CUSTOM_FONT_VALUE}>请先获取系统字体</option>
+            ) : null}
+            {availableFonts.map((font) => (
+              <option key={font} value={font}>
+                {font}
+              </option>
+            ))}
+            <option value={CUSTOM_FONT_VALUE}>自定义...</option>
+          </select>
+
+          {terminalFontPreset === CUSTOM_FONT_VALUE && (
+            <input
+              type="text"
+              value={terminalFontFamilyInput}
+              onChange={(event) => setTerminalFontFamilyInput(event.target.value)}
+              placeholder='例如 "Sarasa Mono SC", Consolas, monospace'
+              style={inputStyle}
+            />
+          )}
+
+          <label style={labelStyle}>终端字号</label>
+          <input
+            type="number"
+            min={8}
+            max={32}
+            step={1}
+            value={terminalFontSize}
+            onChange={(event) => setTerminalFontSize(event.target.value)}
+            placeholder="13"
+            style={inputStyle}
+          />
 
           <div style={sectionStyle}>
             <div style={sectionHeaderStyle}>
@@ -440,6 +562,11 @@ const sectionTitleStyle: React.CSSProperties = {
   margin: 0,
   fontSize: 14,
   color: "#f0f0f0",
+};
+
+const fontHintStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "#9ca3af",
 };
 
 const labelStyle: React.CSSProperties = {

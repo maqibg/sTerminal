@@ -147,3 +147,42 @@ pub async fn terminal_pick_directory() -> Result<Option<String>, String> {
         .pick_folder()
         .map(|path| path.to_string_lossy().to_string()))
 }
+
+/// 列出当前系统可用字体名称
+#[tauri::command]
+pub async fn terminal_list_fonts() -> Result<Vec<String>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::collections::BTreeSet;
+        use winreg::enums::HKEY_LOCAL_MACHINE;
+        use winreg::RegKey;
+
+        let key = RegKey::predef(HKEY_LOCAL_MACHINE)
+            .open_subkey("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts")
+            .map_err(|e| format!("Failed to open Windows fonts registry: {}", e))?;
+
+        let mut fonts = BTreeSet::new();
+        for item in key.enum_values() {
+            let Ok((name, _)) = item else {
+                continue;
+            };
+            let normalized = name
+                .replace(" (TrueType)", "")
+                .replace(" (OpenType)", "")
+                .replace(" (All res)", "")
+                .replace(" (Variable TrueType)", "")
+                .trim()
+                .to_string();
+            if !normalized.is_empty() {
+                fonts.insert(normalized);
+            }
+        }
+
+        return Ok(fonts.into_iter().collect());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(Vec::new())
+    }
+}

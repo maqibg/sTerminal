@@ -6,7 +6,7 @@ mod store;
 use tauri::Manager;
 use commands::terminal::{
     terminal_create, terminal_kill, terminal_resize, terminal_write, terminal_get_cwd,
-    shell_list_available, terminal_pick_executable, terminal_pick_directory,
+    shell_list_available, terminal_pick_executable, terminal_pick_directory, terminal_list_fonts,
 };
 use commands::layout::{
     layout_save, layout_list, layout_load, layout_update, layout_delete, layout_rename,
@@ -32,6 +32,7 @@ pub fn run() {
             shell_list_available,
             terminal_pick_executable,
             terminal_pick_directory,
+            terminal_list_fonts,
             // 布局持久化命令
             layout_save,
             layout_list,

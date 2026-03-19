@@ -17,6 +17,7 @@ import {
   terminalResize,
   terminalKill,
 } from "../ipc/terminalApi";
+import { getTerminalAppearanceSettings } from "../store/appSettingsStore";
 import type {
   TerminalOutputEvent,
   TerminalExitEvent,
@@ -47,6 +48,18 @@ const DESTROY_DELAY = 5_000;
 
 function notifyListeners(sessionId: string) {
   stateListeners.get(sessionId)?.forEach((fn) => fn());
+}
+
+export function applyTerminalAppearance(fontFamily: string, fontSize: number) {
+  cache.forEach((managed) => {
+    managed.terminal.options.fontFamily = fontFamily;
+    managed.terminal.options.fontSize = fontSize;
+    try {
+      managed.fitAddon.fit();
+    } catch {
+      // ignore fit errors on hidden terminals
+    }
+  });
 }
 
 // ── 公共 API ──
@@ -98,6 +111,7 @@ export function acquireTerminal(
   container.style.cssText = "flex:1;overflow:hidden;min-height:0;";
 
   // ── 创建 xterm ──
+  const appearance = getTerminalAppearanceSettings();
   const term = new Terminal({
     theme: {
       background: "#0d0d0d",
@@ -121,9 +135,8 @@ export function acquireTerminal(
       brightCyan: "#6ee7b7",
       brightWhite: "#f5f5f5",
     },
-    fontFamily:
-      '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, "Courier New", monospace',
-    fontSize: 13,
+    fontFamily: appearance.fontFamily,
+    fontSize: appearance.fontSize,
     lineHeight: 1.2,
     letterSpacing: 0,
     cursorBlink: true,

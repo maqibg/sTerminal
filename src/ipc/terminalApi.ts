@@ -91,3 +91,10 @@ export async function terminalPickExecutable(): Promise<string | null> {
 export async function terminalPickDirectory(): Promise<string | null> {
   return invoke("terminal_pick_directory");
 }
+
+/**
+ * 列出当前系统可用字体名称
+ */
+export async function terminalListFonts(): Promise<string[]> {
+  return invoke("terminal_list_fonts");
+}

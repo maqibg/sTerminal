@@ -10,6 +10,9 @@ import { GlobalSettingsDialog } from "./components/settings/GlobalSettingsDialog
 import { Toast } from "./components/Toast";
 import { useLayoutStore } from "./store/layoutStore";
 import {
+  applyTerminalAppearance,
+} from "./terminal/terminalInstances";
+import {
   getResolvedDefaultTerminal,
   useAppSettingsStore,
 } from "./store/appSettingsStore";
@@ -143,6 +146,10 @@ export function App() {
     async (settings: AppSettings) => {
       await settingsSave(settings);
       updateAppSettings(settings);
+      applyTerminalAppearance(
+        settings.terminalFontFamily,
+        settings.terminalFontSize
+      );
       setShowGlobalSettings(false);
       addToast("全局设置已保存", "success");
     },

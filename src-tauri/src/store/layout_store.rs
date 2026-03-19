@@ -83,6 +83,15 @@ pub struct AppSettings {
     /// 默认初始工作目录，空字符串使用 Home 目录
     #[serde(rename = "defaultWorkingDirectory", default)]
     pub default_working_directory: String,
+    /// 终端字体
+    #[serde(rename = "terminalFontFamily", default = "default_terminal_font_family")]
+    pub terminal_font_family: String,
+    /// 终端字号
+    #[serde(rename = "terminalFontSize", default = "default_terminal_font_size")]
+    pub terminal_font_size: u16,
+    /// 最近一次获取到的系统字体列表
+    #[serde(rename = "detectedTerminalFonts", default)]
+    pub detected_terminal_fonts: Vec<String>,
     /// 用户自定义终端
     #[serde(rename = "customTerminals", default)]
     pub custom_terminals: Vec<CustomTerminalProfile>,
@@ -95,12 +104,24 @@ fn default_shell() -> String {
     "powershell".to_string()
 }
 
+fn default_terminal_font_family() -> String {
+    "\"Cascadia Code\", \"Fira Code\", \"JetBrains Mono\", Consolas, \"Courier New\", monospace"
+        .to_string()
+}
+
+fn default_terminal_font_size() -> u16 {
+    13
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         AppSettings {
             default_shell: default_shell(),
             default_terminal_id: String::new(),
             default_working_directory: String::new(),
+            terminal_font_family: default_terminal_font_family(),
+            terminal_font_size: default_terminal_font_size(),
+            detected_terminal_fonts: Vec::new(),
             custom_terminals: Vec::new(),
             detected_system_terminals: Vec::new(),
         }

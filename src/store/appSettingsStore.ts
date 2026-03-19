@@ -10,6 +10,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultShell: "powershell",
   defaultTerminalId: "",
   defaultWorkingDirectory: "",
+  terminalFontFamily:
+    '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, "Courier New", monospace',
+  terminalFontSize: 13,
+  detectedTerminalFonts: [],
   customTerminals: [],
   detectedSystemTerminals: [],
 };
@@ -126,6 +130,14 @@ export function getDefaultTerminalSessionConfig(): Partial<
   };
 }
 
+export function getTerminalAppearanceSettings() {
+  const { settings } = useAppSettingsStore.getState();
+  return {
+    fontFamily: settings.terminalFontFamily,
+    fontSize: settings.terminalFontSize,
+  };
+}
+
 interface AppSettingsStoreState {
   settings: AppSettings;
   systemShells: ShellInfo[];
@@ -144,6 +156,7 @@ export const useAppSettingsStore = create<AppSettingsStoreState>((set) => ({
     const nextSettings = {
       ...DEFAULT_SETTINGS,
       ...settings,
+      detectedTerminalFonts: settings.detectedTerminalFonts ?? [],
       customTerminals: settings.customTerminals ?? [],
       detectedSystemTerminals: settings.detectedSystemTerminals ?? [],
     };
@@ -162,6 +175,7 @@ export const useAppSettingsStore = create<AppSettingsStoreState>((set) => ({
     const nextSettings = {
       ...DEFAULT_SETTINGS,
       ...settings,
+      detectedTerminalFonts: settings.detectedTerminalFonts ?? [],
       customTerminals: settings.customTerminals ?? [],
       detectedSystemTerminals: settings.detectedSystemTerminals ?? [],
     };

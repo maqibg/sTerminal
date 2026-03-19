@@ -117,6 +117,12 @@ export interface AppSettings {
   defaultTerminalId: string;
   /** 默认初始工作目录绝对路径，空字符串表示使用用户 Home 目录 */
   defaultWorkingDirectory: string;
+  /** 终端字体 */
+  terminalFontFamily: string;
+  /** 终端字号 */
+  terminalFontSize: number;
+  /** 最近一次手动获取到的系统字体列表 */
+  detectedTerminalFonts: string[];
   /** 用户手动添加的终端列表 */
   customTerminals: CustomTerminalProfile[];
   /** 最近一次手动检测到的系统终端快照 */
