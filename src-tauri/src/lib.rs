@@ -19,6 +19,7 @@ pub fn run() {
     tauri::Builder::default()
         // 注册 tauri-plugin-store 持久化插件
         .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         // 注册 PtyManager 为全局托管状态（线程安全）
         .manage(PtyManager::new())
         // 注册所有 Tauri command

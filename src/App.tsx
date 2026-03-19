@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import "./styles/global.css";
 import "./styles/terminal.css";
 import "./styles/tabbar.css";
@@ -13,6 +13,7 @@ import { useSettingsStore } from "./store/settingsStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { layoutUpdate } from "./ipc/layoutApi";
 import { collectLeaves } from "./utils/layoutTree";
+import { refitAll } from "./terminal/terminalInstances";
 import type { LayoutNode, AppSettings } from "./types/layout";
 
 interface ToastState {
@@ -38,18 +39,12 @@ export function App() {
   const markLayoutClean = useLayoutStore((s) => s.markLayoutClean);
 
   const appSettings = useSettingsStore((s) => s.settings);
-  const loadSettings = useSettingsStore((s) => s.loadSettings);
   const updateSettings = useSettingsStore((s) => s.updateSettings);
 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showLayoutManager, setShowLayoutManager] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [toasts, setToasts] = useState<ToastState[]>([]);
-
-  // 应用启动时加载设置
-  useEffect(() => {
-    loadSettings();
-  }, [loadSettings]);
 
   // 布局名称递增计数
   const [layoutNameCounter, setLayoutNameCounter] = useState(1);
@@ -101,17 +96,23 @@ export function App() {
     addToast(message, "warning");
   };
 
+  const closeSettings = useCallback(() => {
+    setShowSettings(false);
+    // 弹窗关闭后刷新终端渲染位置
+    requestAnimationFrame(() => refitAll());
+  }, []);
+
   const handleSettingsSave = useCallback(
     async (newSettings: AppSettings) => {
       try {
         await updateSettings(newSettings);
-        setShowSettings(false);
+        closeSettings();
         addToast("设置已保存", "success");
       } catch (e) {
         addToast("保存设置失败：" + String(e), "error");
       }
     },
-    [updateSettings, addToast]
+    [updateSettings, closeSettings, addToast]
   );
 
   // 快捷键：操作当前焦点面板
@@ -170,7 +171,7 @@ export function App() {
         <AppSettingsDialog
           settings={appSettings}
           onSave={handleSettingsSave}
-          onCancel={() => setShowSettings(false)}
+          onCancel={closeSettings}
         />
       )}
 
@@ -190,6 +191,7 @@ export function App() {
         onClose={() => setShowLayoutManager(false)}
         onLayoutLoad={handleLayoutLoad}
         onWorkdirWarning={handleWorkdirWarning}
+        onError={(msg) => addToast(msg, "error")}
         activeLayoutId={activeLayoutId}
         layoutDirty={layoutDirty}
         onSaveLayout={handleSaveLayout}

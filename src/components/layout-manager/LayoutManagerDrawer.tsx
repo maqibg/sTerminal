@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import type { SavedLayoutMeta, LayoutNode } from "../../types/layout";
 import { layoutList, layoutLoad } from "../../ipc/layoutApi";
+import { useConfirm } from "../../hooks/useConfirm";
 import { LayoutListItem } from "./LayoutListItem";
 
 interface LayoutManagerDrawerProps {
@@ -10,6 +11,8 @@ interface LayoutManagerDrawerProps {
   onLayoutLoad: (tree: LayoutNode, layoutId: string, layoutName: string) => void;
   /** 工作目录警告 Toast 触发 */
   onWorkdirWarning?: (message: string) => void;
+  /** 错误 Toast 触发 */
+  onError?: (message: string) => void;
   /** 当前绑定的布局 ID */
   activeLayoutId?: string | null;
   /** 布局是否有未保存的修改 */
@@ -27,12 +30,14 @@ export const LayoutManagerDrawer: React.FC<LayoutManagerDrawerProps> = ({
   onClose,
   onLayoutLoad,
   onWorkdirWarning,
+  onError,
   activeLayoutId,
   layoutDirty,
   onSaveLayout,
   onNewLayout,
   refreshTrigger,
 }) => {
+  const [confirm, ConfirmPortal] = useConfirm();
   const [layouts, setLayouts] = useState<SavedLayoutMeta[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -65,18 +70,14 @@ export const LayoutManagerDrawer: React.FC<LayoutManagerDrawerProps> = ({
   }, [open, onClose]);
 
   const handleLoad = async (layoutId: string) => {
-    const ok = confirm("加载布局将关闭当前所有面板，确认继续？");
+    const ok = await confirm({ message: "加载布局将关闭当前所有面板，确认继续？", title: "加载布局" });
     if (!ok) return;
     try {
       const saved = await layoutLoad(layoutId);
       onLayoutLoad(saved.tree, saved.id, saved.name);
       onClose();
-      // 检查工作目录是否存在由后端处理，前端可通过事件获知
-      if (onWorkdirWarning) {
-        // 工作目录检查已在后端执行，此处预留接口
-      }
     } catch (e) {
-      alert("加载布局失败：" + String(e));
+      onError?.("加载布局失败：" + String(e));
     }
   };
 
@@ -140,10 +141,13 @@ export const LayoutManagerDrawer: React.FC<LayoutManagerDrawerProps> = ({
               onSave={onSaveLayout}
               onDeleted={handleDeleted}
               onRenamed={handleRenamed}
+              onError={onError}
+              onConfirm={(msg) => confirm({ message: msg, title: "删除布局", kind: "danger" })}
             />
           ))}
         </div>
       </div>
+      <ConfirmPortal />
     </>
   );
 };

@@ -41,3 +41,6 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     set({ settings });
   },
 }));
+
+/** 设置加载 Promise，供需要等待设置就绪的模块使用 */
+export const settingsReady: Promise<void> = useSettingsStore.getState().loadSettings();

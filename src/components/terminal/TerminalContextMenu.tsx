@@ -16,6 +16,7 @@ interface TerminalContextMenuProps {
   onSettings: () => void;
   onClose: () => void;
   onDismiss: () => void;
+  onConfirm?: (message: string) => Promise<boolean>;
 }
 
 export const TerminalContextMenu: React.FC<TerminalContextMenuProps> = ({
@@ -29,6 +30,7 @@ export const TerminalContextMenu: React.FC<TerminalContextMenuProps> = ({
   onSettings,
   onClose,
   onDismiss,
+  onConfirm,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -110,14 +112,15 @@ export const TerminalContextMenu: React.FC<TerminalContextMenuProps> = ({
         className="terminal-context-menu__item"
         onClick={() => handleAction(onSettings)}
       >
-        ⚙ 终端设置
+        ⚙ 当前控制台设置
       </button>
       <div className="terminal-context-menu__separator" />
       <button
         className="terminal-context-menu__item terminal-context-menu__item--danger"
-        onClick={() => {
-          if (isLastPanel) {
-            if (!confirm("这是最后一个面板，确认关闭将退出应用，继续？")) {
+        onClick={async () => {
+          if (isLastPanel && onConfirm) {
+            const ok = await onConfirm("这是最后一个面板，确认关闭将退出应用，继续？");
+            if (!ok) {
               onDismiss();
               return;
             }

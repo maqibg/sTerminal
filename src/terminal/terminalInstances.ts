@@ -17,6 +17,7 @@ import {
   terminalResize,
   terminalKill,
 } from "../ipc/terminalApi";
+import { useSettingsStore, settingsReady } from "../store/settingsStore";
 import type {
   TerminalOutputEvent,
   TerminalExitEvent,
@@ -50,6 +51,19 @@ function notifyListeners(sessionId: string) {
 }
 
 // ── 公共 API ──
+
+/** 重新 fit 所有活跃终端并强制刷新渲染（弹窗关闭等场景） */
+export function refitAll() {
+  for (const managed of cache.values()) {
+    try {
+      managed.fitAddon.fit();
+      // 强制刷新整个终端画布，修复 WebGL 渲染偏移
+      managed.terminal.refresh(0, managed.terminal.rows - 1);
+    } catch {
+      // ignore
+    }
+  }
+}
 
 /** 订阅终端状态变更（isAlive / exitCode） */
 export function subscribeTerminal(
@@ -218,10 +232,19 @@ export function acquireTerminal(
 
   const init = async () => {
     try {
+      // 等待设置从后端加载完成，确保能读到用户配置的默认 shell
+      await settingsReady;
+
+      // await 恢复后 rAF 的 fit 可能尚未执行，手动 fit 确保尺寸准确
+      try { fitAddon.fit(); } catch { /* 容器不可见时忽略 */ }
+
+      const { settings } = useSettingsStore.getState();
+      const effectiveShellPath = shellPath || settings.defaultShellPath || "";
+      const effectiveWorkDir = workingDirectory || settings.defaultWorkingDirectory || "";
       const { cols, rows } = term;
       const id = await terminalCreate(
-        shellPath,
-        workingDirectory,
+        effectiveShellPath,
+        effectiveWorkDir,
         cols,
         rows
       );
@@ -230,6 +253,9 @@ export function acquireTerminal(
         return;
       }
       managed.terminalId = id;
+
+      // PTY 就绪后再 fit 一次，确保 onResize 能发送给 PTY
+      try { fitAddon.fit(); } catch { /* ignore */ }
 
       // 执行启动命令
       if (startupCommand) {

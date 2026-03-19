@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { TerminalSession } from "../../types/layout";
 import type { ShellInfo } from "../../types/terminal";
 import { shellListAvailable } from "../../ipc/terminalApi";
@@ -92,13 +93,30 @@ export const TerminalSettingsDialog: React.FC<TerminalSettingsDialogProps> = ({
         </select>
 
         <label style={labelStyle}>启动目录</label>
-        <input
-          type="text"
-          value={workingDirectory}
-          onChange={(e) => setWorkingDirectory(e.target.value)}
-          placeholder="留空使用默认目录"
-          style={inputStyle}
-        />
+        <div style={rowStyle}>
+          <input
+            type="text"
+            value={workingDirectory}
+            onChange={(e) => setWorkingDirectory(e.target.value)}
+            placeholder="留空使用默认目录"
+            style={{ ...inputStyle, flex: 1, marginBottom: 0 }}
+          />
+          <button
+            type="button"
+            style={browseBtnStyle}
+            title="选择文件夹"
+            onClick={async () => {
+              const selected = await open({
+                directory: true,
+                multiple: false,
+                defaultPath: workingDirectory || undefined,
+              });
+              if (typeof selected === "string") setWorkingDirectory(selected);
+            }}
+          >
+            …
+          </button>
+        </div>
 
         <label style={labelStyle}>启动命令</label>
         <input
@@ -180,6 +198,23 @@ const selectStyle: React.CSSProperties = {
   borderRadius: 4,
   fontSize: 13,
   outline: "none",
+};
+
+const rowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 6,
+  marginBottom: 12,
+};
+
+const browseBtnStyle: React.CSSProperties = {
+  padding: "4px 10px",
+  background: "#333",
+  color: "#ccc",
+  border: "1px solid #444",
+  borderRadius: 4,
+  cursor: "pointer",
+  fontSize: 13,
+  flexShrink: 0,
 };
 
 const actionsStyle: React.CSSProperties = {

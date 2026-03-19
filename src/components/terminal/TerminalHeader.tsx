@@ -10,6 +10,7 @@ interface TerminalHeaderProps {
   onSplitVertical: () => void;
   onDuplicate: () => void;
   onClose: () => void;
+  onConfirm?: (message: string) => Promise<boolean>;
 }
 
 /** 缩略路径：超过 20 字符截断末尾 + "..." */
@@ -29,6 +30,7 @@ export const TerminalHeader: React.FC<TerminalHeaderProps> = ({
   onSplitVertical,
   onDuplicate,
   onClose,
+  onConfirm,
 }) => {
   const { icon, color } = getShellIcon(shellType);
   const dirLabel = truncatePath(workingDirectory);
@@ -75,9 +77,10 @@ export const TerminalHeader: React.FC<TerminalHeaderProps> = ({
         <button
           className="terminal-header__btn terminal-header__btn--close"
           title={isLastPanel ? "最后一个面板，无法关闭" : "关闭面板 (Ctrl+Shift+W)"}
-          onClick={() => {
-            if (isLastPanel) {
-              if (!confirm("这是最后一个面板，确认关闭将退出应用，继续？")) return;
+          onClick={async () => {
+            if (isLastPanel && onConfirm) {
+              const ok = await onConfirm("这是最后一个面板，确认关闭将退出应用，继续？");
+              if (!ok) return;
             }
             onClose();
           }}
