@@ -36,18 +36,106 @@ export interface ManagedTerminal {
 
 /** session ID → 实例 */
 const cache = new Map<string, ManagedTerminal>();
+/** terminal ID → 实例 */
+const terminalsById = new Map<string, ManagedTerminal>();
 /** session ID → 清理函数 */
 const cleanupFns = new Map<string, () => void>();
 /** session ID → 延迟销毁定时器 */
 const pendingDestroy = new Map<string, ReturnType<typeof setTimeout>>();
 /** session ID → 状态变更监听器 */
 const stateListeners = new Map<string, Set<() => void>>();
+/** terminal ID → 绑定实例前缓存的启动早期输出 */
+const pendingOutput = new Map<string, Uint8Array[]>();
+/** terminal ID → 绑定实例前收到的退出码 */
+const pendingExit = new Map<string, number>();
+/** 已关闭终端 ID，用来忽略 kill 之后迟到的事件 */
+const closedTerminalIds = new Set<string>();
+
+let eventBridgePromise: Promise<void> | null = null;
 
 /** 组件 detach 后等待多久才真正销毁（ms） */
 const DESTROY_DELAY = 5_000;
 
 function notifyListeners(sessionId: string) {
   stateListeners.get(sessionId)?.forEach((fn) => fn());
+}
+
+function enqueuePendingOutput(terminalId: string, data: Uint8Array) {
+  const queue = pendingOutput.get(terminalId);
+  if (queue) {
+    queue.push(data);
+    return;
+  }
+  pendingOutput.set(terminalId, [data]);
+}
+
+function flushPendingOutput(managed: ManagedTerminal) {
+  const terminalId = managed.terminalId;
+  if (!terminalId) return;
+
+  const queue = pendingOutput.get(terminalId);
+  if (queue) {
+    pendingOutput.delete(terminalId);
+    queue.forEach((chunk) => managed.terminal.write(chunk));
+  }
+
+  const exitCode = pendingExit.get(terminalId);
+  if (exitCode !== undefined) {
+    pendingExit.delete(terminalId);
+    managed.isAlive = false;
+    managed.exitCode = exitCode;
+    notifyListeners(managed.sessionId);
+  }
+}
+
+function bindTerminalId(managed: ManagedTerminal, terminalId: string) {
+  if (managed.terminalId && managed.terminalId !== terminalId) {
+    terminalsById.delete(managed.terminalId);
+  }
+
+  closedTerminalIds.delete(terminalId);
+  managed.terminalId = terminalId;
+  terminalsById.set(terminalId, managed);
+  flushPendingOutput(managed);
+}
+
+function ensureEventBridge() {
+  if (eventBridgePromise) return eventBridgePromise;
+
+  eventBridgePromise = Promise.all([
+    listen<TerminalOutputEvent>("terminal:output", (event) => {
+      if (closedTerminalIds.has(event.payload.terminalId)) {
+        return;
+      }
+      const data = new Uint8Array(event.payload.data);
+      const managed = terminalsById.get(event.payload.terminalId);
+      if (managed) {
+        managed.terminal.write(data);
+        return;
+      }
+      enqueuePendingOutput(event.payload.terminalId, data);
+    }),
+    listen<TerminalExitEvent>("terminal:exit", (event) => {
+      if (closedTerminalIds.has(event.payload.terminalId)) {
+        return;
+      }
+      const managed = terminalsById.get(event.payload.terminalId);
+      if (managed) {
+        managed.isAlive = false;
+        managed.exitCode = event.payload.exitCode;
+        notifyListeners(managed.sessionId);
+        return;
+      }
+      pendingExit.set(event.payload.terminalId, event.payload.exitCode);
+    }),
+  ])
+    .then(() => undefined)
+    .catch((error) => {
+      eventBridgePromise = null;
+      throw error;
+    });
+
+  return eventBridgePromise;
 }
 
 export function applyTerminalAppearance(fontFamily: string, fontSize: number) {
@@ -225,12 +313,11 @@ export function acquireTerminal(
   cache.set(sessionId, managed);
 
   // ── 创建 PTY ──
-  let unlistenOutput: (() => void) | undefined;
-  let unlistenExit: (() => void) | undefined;
   let destroyed = false;
 
   const init = async () => {
     try {
+      await ensureEventBridge();
       const { cols, rows } = term;
       const id = await terminalCreate(
         shellPath,
@@ -242,7 +329,7 @@ export function acquireTerminal(
         terminalKill(id).catch(console.error);
         return;
       }
-      managed.terminalId = id;
+      bindTerminalId(managed, id);
 
       // 执行启动命令
       if (startupCommand) {
@@ -250,24 +337,6 @@ export function acquireTerminal(
           terminalWrite(id, new TextEncoder().encode(startupCommand + "\r")).catch(console.error);
         }, 300);
       }
-
-      unlistenOutput = await listen<TerminalOutputEvent>(
-        "terminal:output",
-        (event) => {
-          if (event.payload.terminalId !== id) return;
-          term.write(new Uint8Array(event.payload.data));
-        }
-      );
-
-      unlistenExit = await listen<TerminalExitEvent>(
-        "terminal:exit",
-        (event) => {
-          if (event.payload.terminalId !== id) return;
-          managed.isAlive = false;
-          managed.exitCode = event.payload.exitCode;
-          notifyListeners(sessionId);
-        }
-      );
     } catch (err) {
       console.error(
         `[terminalInstances] Failed to create PTY for ${sessionId}:`,
@@ -297,10 +366,14 @@ export function acquireTerminal(
     destroyed = true;
     dataDisposable.dispose();
     resizeDisposable.dispose();
-    if (unlistenOutput) unlistenOutput();
-    if (unlistenExit) unlistenExit();
     const id = managed.terminalId;
-    if (id) terminalKill(id).catch(console.error);
+    if (id) {
+      closedTerminalIds.add(id);
+      terminalsById.delete(id);
+      pendingOutput.delete(id);
+      pendingExit.delete(id);
+      terminalKill(id).catch(console.error);
+    }
     term.dispose();
   });
 
