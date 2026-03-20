@@ -42,12 +42,19 @@ pub fn run() {
             settings_get,
             settings_save,
         ])
-        // 设置窗口图标
+        // 设置窗口图标 + 平台适配
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 let icon_bytes = include_bytes!("../icons/icon.png");
                 if let Ok(icon) = tauri::image::Image::from_bytes(icon_bytes) {
                     let _ = window.set_icon(icon);
+                }
+
+                // macOS: 启用原生红绿灯按钮 + Overlay 标题栏
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = window.set_decorations(true);
+                    let _ = window.set_title_bar_style(tauri::TitleBarStyle::Overlay);
                 }
             }
             Ok(())

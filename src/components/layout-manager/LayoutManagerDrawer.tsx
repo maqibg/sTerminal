@@ -29,7 +29,6 @@ export const LayoutManagerDrawer: React.FC<LayoutManagerDrawerProps> = ({
   open,
   onClose,
   onLayoutLoad,
-  onWorkdirWarning,
   onError,
   activeLayoutId,
   layoutDirty,

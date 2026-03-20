@@ -1,5 +1,6 @@
 import React from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isMacOS } from "../../utils/platform";
 
 interface TitleBarProps {
   onOpenLayoutManager: () => void;
@@ -91,30 +92,33 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </svg>
         </button>
 
-        <div style={separatorStyle} />
-
-        {/* 窗口控制按钮 */}
-        <button
-          className="win-btn"
-          onClick={handleMinimize}
-          title="最小化"
-        >
-          ─
-        </button>
-        <button
-          className="win-btn"
-          onClick={handleMaximize}
-          title="最大化/还原"
-        >
-          □
-        </button>
-        <button
-          className="win-btn win-btn--close"
-          onClick={handleClose}
-          title="关闭"
-        >
-          ✕
-        </button>
+        {/* 窗口控制按钮 - macOS 使用原生红绿灯，无需自定义按钮 */}
+        {!isMacOS && (
+          <>
+            <div style={separatorStyle} />
+            <button
+              className="win-btn"
+              onClick={handleMinimize}
+              title="最小化"
+            >
+              ─
+            </button>
+            <button
+              className="win-btn"
+              onClick={handleMaximize}
+              title="最大化/还原"
+            >
+              □
+            </button>
+            <button
+              className="win-btn win-btn--close"
+              onClick={handleClose}
+              title="关闭"
+            >
+              ✕
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -128,6 +132,8 @@ const titlebarStyle: React.CSSProperties = {
   borderBottom: "1px solid var(--border, #333)",
   flexShrink: 0,
   userSelect: "none",
+  // macOS: 为原生红绿灯按钮预留左侧空间
+  paddingLeft: isMacOS ? 70 : 0,
 };
 
 const leftStyle: React.CSSProperties = {
