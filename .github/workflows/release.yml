@@ -64,3 +64,11 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Upload portable exe (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          cp src-tauri/target/release/s-terminal.exe "sTerminal_${{ github.ref_name }}_portable_x64.exe"
+          gh release upload ${{ github.ref_name }} "sTerminal_${{ github.ref_name }}_portable_x64.exe" --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
