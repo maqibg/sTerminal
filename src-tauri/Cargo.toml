@@ -1,6 +1,6 @@
 [package]
 name = "s-terminal"
-version = "0.1.10"
+version = "0.1.11"
 description = "sTerminal - 多面板本地终端模拟器"
 authors = ["sTerminal Team"]
 license = "MIT"
@@ -33,6 +33,8 @@ tokio = { version = "1", features = ["full"] }
 portable-pty = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 rfd = "0.15"
+arboard = "3"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

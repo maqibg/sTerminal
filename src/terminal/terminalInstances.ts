@@ -14,6 +14,7 @@ import "@xterm/xterm/css/xterm.css";
 import {
   terminalCreate,
   terminalGetWindowsPtyInfo,
+  terminalPrepareClipboardPaste,
   terminalWrite,
   terminalResize,
   terminalKill,
@@ -468,13 +469,12 @@ export function acquireTerminal(
 
   // 复制粘贴拦截（与 Windows Terminal 行为一致）
   const doPaste = () => {
-    navigator.clipboard
-      .readText()
-      .then((text) => {
-        if (text && managed.terminalId) {
+    terminalPrepareClipboardPaste()
+      .then((payload) => {
+        if (payload?.text && managed.terminalId) {
           terminalWrite(
             managed.terminalId,
-            new TextEncoder().encode(text)
+            new TextEncoder().encode(payload.text)
           ).catch(console.error);
         }
       })

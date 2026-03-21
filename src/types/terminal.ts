@@ -88,6 +88,16 @@ export interface WindowsPtyInfo {
 }
 
 /**
+ * 由原生剪贴板准备好的可粘贴内容
+ */
+export interface ClipboardPastePayload {
+  /** 实际要写入终端的文本 */
+  text: string;
+  /** 剪贴板内容类型 */
+  contentType: "text" | "image" | "files";
+}
+
+/**
  * terminal:output 事件 Payload
  */
 export interface TerminalOutputEvent {

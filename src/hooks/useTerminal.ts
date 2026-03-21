@@ -9,7 +9,10 @@ import {
   scheduleTerminalFit,
   subscribeTerminal,
 } from "../terminal/terminalInstances";
-import { terminalWrite } from "../ipc/terminalApi";
+import {
+  terminalPrepareClipboardPaste,
+  terminalWrite,
+} from "../ipc/terminalApi";
 
 interface UseTerminalOptions {
   panelId: string;
@@ -93,11 +96,11 @@ export function useTerminal({
 
   const pasteFromClipboard = useCallback(async () => {
     try {
-      const text = await navigator.clipboard.readText();
-      if (!text) return;
+      const payload = await terminalPrepareClipboardPaste();
+      if (!payload?.text) return;
       const id = getTerminal(panelId)?.terminalId;
       if (id) {
-        terminalWrite(id, new TextEncoder().encode(text)).catch(
+        terminalWrite(id, new TextEncoder().encode(payload.text)).catch(
           console.error
         );
       }

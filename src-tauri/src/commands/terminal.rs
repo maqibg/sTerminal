@@ -52,6 +52,13 @@ pub struct WindowsPtyInfo {
     pub build_number: Option<u32>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ClipboardPastePayload {
+    pub text: String,
+    #[serde(rename = "contentType")]
+    pub content_type: String,
+}
+
 // ============================================================
 // Tauri Commands（DEV-A 负责 terminal_create / terminal_kill）
 // ============================================================
@@ -226,5 +233,77 @@ pub async fn terminal_get_windows_pty_info() -> Result<Option<WindowsPtyInfo>, S
     #[cfg(not(target_os = "windows"))]
     {
         Ok(None)
+    }
+}
+
+/// 准备一份适合写入终端的剪贴板内容
+#[tauri::command]
+pub async fn terminal_prepare_clipboard_paste() -> Result<Option<ClipboardPastePayload>, String> {
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|e| format!("Clipboard unavailable: {}", e))?;
+
+    if let Ok(files) = clipboard.get().file_list() {
+        if !files.is_empty() {
+            let text = files
+                .into_iter()
+                .map(|path| quote_shell_argument(&path))
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            return Ok(Some(ClipboardPastePayload {
+                text,
+                content_type: "files".to_string(),
+            }));
+        }
+    }
+
+    if let Ok(image) = clipboard.get_image() {
+        let data_dir = resolve_clipboard_data_dir()?;
+        std::fs::create_dir_all(&data_dir)
+            .map_err(|e| format!("Failed to create clipboard data directory: {}", e))?;
+        let file_path = data_dir.join(format!("clipboard-{}.png", uuid::Uuid::new_v4()));
+
+        let rgba = image::RgbaImage::from_raw(
+            image.width as u32,
+            image.height as u32,
+            image.bytes.into_owned(),
+        )
+        .ok_or_else(|| "Clipboard image data is invalid".to_string())?;
+
+        image::DynamicImage::ImageRgba8(rgba)
+            .save_with_format(&file_path, image::ImageFormat::Png)
+            .map_err(|e| format!("Failed to encode clipboard image: {}", e))?;
+
+        return Ok(Some(ClipboardPastePayload {
+            text: quote_shell_argument(&file_path),
+            content_type: "image".to_string(),
+        }));
+    }
+
+    match clipboard.get_text() {
+        Ok(text) if !text.is_empty() => Ok(Some(ClipboardPastePayload {
+            text,
+            content_type: "text".to_string(),
+        })),
+        Ok(_) => Ok(None),
+        Err(err) => Err(format!("Clipboard text unavailable: {}", err)),
+    }
+}
+
+fn resolve_clipboard_data_dir() -> Result<std::path::PathBuf, String> {
+    let exe_path =
+        std::env::current_exe().map_err(|e| format!("Failed to resolve current exe: {}", e))?;
+    let exe_dir = exe_path
+        .parent()
+        .ok_or_else(|| format!("Executable has no parent directory: {}", exe_path.display()))?;
+    Ok(exe_dir.join("data").join("clipboard"))
+}
+
+fn quote_shell_argument(path: &std::path::Path) -> String {
+    let text = path.to_string_lossy();
+    if text.contains([' ', '\t', '"']) {
+        format!("\"{}\"", text.replace('"', "\\\""))
+    } else {
+        text.to_string()
     }
 }

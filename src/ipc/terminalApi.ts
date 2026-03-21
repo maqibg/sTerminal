@@ -1,5 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ShellInfo, WindowsPtyInfo } from "../types/terminal";
+import type {
+  ClipboardPastePayload,
+  ShellInfo,
+  WindowsPtyInfo,
+} from "../types/terminal";
 
 /**
  * 创建 PTY 进程，返回分配的终端 ID
@@ -104,4 +108,11 @@ export async function terminalListFonts(): Promise<string[]> {
  */
 export async function terminalGetWindowsPtyInfo(): Promise<WindowsPtyInfo | null> {
   return invoke("terminal_get_windows_pty_info");
+}
+
+/**
+ * 从原生剪贴板准备一份适合写入终端的内容
+ */
+export async function terminalPrepareClipboardPaste(): Promise<ClipboardPastePayload | null> {
+  return invoke("terminal_prepare_clipboard_paste");
 }
