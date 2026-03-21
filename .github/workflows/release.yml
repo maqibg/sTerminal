@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: 生成发布说明
+        id: changelog
+        shell: bash
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            LOGS=$(git log --pretty=format:"- %s" --no-merges -20)
+            COMPARE="$(git rev-list --max-parents=0 HEAD | head -1)"
+          else
+            LOGS=$(git log --pretty=format:"- %s" --no-merges "${PREV_TAG}..HEAD")
+            COMPARE="${PREV_TAG}"
+          fi
+
+          {
+            echo "notes<<EOF"
+            echo "## 更新内容"
+            echo ""
+            echo "$LOGS"
+            echo ""
+            echo "**完整变更**：https://github.com/${{ github.repository }}/compare/${COMPARE}...${{ github.ref_name }}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: ${{ github.ref_name }}
+          releaseBody: ${{ steps.changelog.outputs.notes }}
+          releaseDraft: false
+          prerelease: false
+
+      - name: 上传便携版 exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" "src-tauri/target/release/sTerminal.exe" --clobber
