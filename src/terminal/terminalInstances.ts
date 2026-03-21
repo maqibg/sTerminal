@@ -13,6 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
 import {
   terminalCreate,
+  terminalGetWindowsPtyInfo,
   terminalWrite,
   terminalResize,
   terminalKill,
@@ -21,6 +22,7 @@ import { getTerminalAppearanceSettings } from "../store/appSettingsStore";
 import type {
   TerminalOutputEvent,
   TerminalExitEvent,
+  WindowsPtyInfo,
 } from "../types/terminal";
 
 export interface ManagedTerminal {
@@ -36,6 +38,12 @@ export interface ManagedTerminal {
   queuedOutputBytes: number;
   flushRafId: number | null;
   flushTimerId: ReturnType<typeof setTimeout> | null;
+  fitRafId: number | null;
+  fitTimerId: ReturnType<typeof setTimeout> | null;
+  lastPtyCols: number;
+  lastPtyRows: number;
+  outputSuspended: boolean;
+  hasRenderedOutput: boolean;
 }
 
 /** session ID → 实例 */
@@ -56,13 +64,49 @@ const pendingExit = new Map<string, number>();
 const closedTerminalIds = new Set<string>();
 
 let eventBridgePromise: Promise<void> | null = null;
+let cachedWindowsPtyInfo: WindowsPtyInfo | undefined;
+let windowsPtyInfoPromise: Promise<WindowsPtyInfo | undefined> | null = null;
 
 /** 组件 detach 后等待多久才真正销毁（ms） */
 const DESTROY_DELAY = 5_000;
 /** 正常情况下每帧最多 flush 一次；隐藏窗口时由 timeout 兜底 */
 const OUTPUT_FLUSH_INTERVAL_MS = 16;
+/** 合并窗口拖拽期间的 fit 和 resize，避免 resize 风暴 */
+const FIT_FLUSH_INTERVAL_MS = 16;
+/** 拖拽窗口时等待尺寸稳定后再真正 resize，避免把中间态重印留在终端里 */
+const RESIZE_SETTLE_INTERVAL_MS = 120;
 /** 防止前端输出队列在长文本洪峰时无限增长 */
 const MAX_QUEUED_OUTPUT_BYTES = 256 * 1024;
+const DEFAULT_WINDOWS_PTY_INFO: WindowsPtyInfo | undefined =
+  navigator.userAgent.toLowerCase().includes("windows")
+    ? { backend: "conpty" }
+    : undefined;
+const BASE_TERMINAL_THEME = {
+  background: "#0d0d0d",
+  foreground: "#e0e0e0",
+  cursor: "#e0e0e0",
+  cursorAccent: "#0d0d0d",
+  black: "#1a1a1a",
+  red: "#f87171",
+  green: "#4ade80",
+  yellow: "#facc15",
+  blue: "#60a5fa",
+  magenta: "#c084fc",
+  cyan: "#34d399",
+  white: "#e0e0e0",
+  brightBlack: "#555",
+  brightRed: "#fca5a5",
+  brightGreen: "#86efac",
+  brightYellow: "#fde047",
+  brightBlue: "#93c5fd",
+  brightMagenta: "#d8b4fe",
+  brightCyan: "#6ee7b7",
+  brightWhite: "#f5f5f5",
+};
+
+function resolveCursorColor(cursorColor: string) {
+  return cursorColor.trim() || BASE_TERMINAL_THEME.cursor;
+}
 
 function notifyListeners(sessionId: string) {
   stateListeners.get(sessionId)?.forEach((fn) => fn());
@@ -93,6 +137,106 @@ function clearFlushHandles(managed: ManagedTerminal) {
   }
 }
 
+function clearFitHandles(managed: ManagedTerminal) {
+  if (managed.fitRafId !== null) {
+    cancelAnimationFrame(managed.fitRafId);
+    managed.fitRafId = null;
+  }
+  if (managed.fitTimerId !== null) {
+    clearTimeout(managed.fitTimerId);
+    managed.fitTimerId = null;
+  }
+}
+
+function syncPtySize(managed: ManagedTerminal) {
+  const terminalId = managed.terminalId;
+  if (!terminalId) return;
+
+  const { cols, rows } = managed.terminal;
+  if (cols === managed.lastPtyCols && rows === managed.lastPtyRows) {
+    return;
+  }
+
+  managed.lastPtyCols = cols;
+  managed.lastPtyRows = rows;
+  terminalResize(terminalId, cols, rows).catch(console.error);
+}
+
+function runFit(managed: ManagedTerminal) {
+  clearFitHandles(managed);
+  try {
+    clearFlushHandles(managed);
+    flushTerminalOutput(managed);
+    managed.fitAddon.fit();
+    syncPtySize(managed);
+  } catch {
+    // 容器不可见或布局尚未稳定时忽略
+  }
+}
+
+function scheduleManagedFit(managed: ManagedTerminal) {
+  if (managed.fitRafId === null) {
+    managed.fitRafId = requestAnimationFrame(() => {
+      runFit(managed);
+    });
+  }
+  if (managed.fitTimerId === null) {
+    managed.fitTimerId = setTimeout(() => {
+      runFit(managed);
+    }, FIT_FLUSH_INTERVAL_MS);
+  }
+}
+
+function scheduleDeferredManagedFit(managed: ManagedTerminal) {
+  if (!managed.hasRenderedOutput) {
+    scheduleManagedFit(managed);
+    return;
+  }
+  managed.outputSuspended = true;
+  clearFitHandles(managed);
+  managed.fitTimerId = setTimeout(() => {
+    managed.fitTimerId = null;
+    runFit(managed);
+    managed.outputSuspended = false;
+    scheduleFlush(managed);
+  }, RESIZE_SETTLE_INTERVAL_MS);
+}
+
+function applyWindowsPtyInfo(managed: ManagedTerminal, info?: WindowsPtyInfo) {
+  if (!info) return;
+
+  const normalizedInfo =
+    info.backend === "conpty" &&
+    info.buildNumber !== undefined &&
+    info.buildNumber < 21376
+      ? { backend: "conpty" as const }
+      : info;
+
+  managed.terminal.options.windowsPty = normalizedInfo;
+  scheduleManagedFit(managed);
+}
+
+function ensureWindowsPtyInfo() {
+  if (!DEFAULT_WINDOWS_PTY_INFO) {
+    return Promise.resolve(undefined);
+  }
+  if (cachedWindowsPtyInfo) {
+    return Promise.resolve(cachedWindowsPtyInfo);
+  }
+  if (!windowsPtyInfoPromise) {
+    windowsPtyInfoPromise = terminalGetWindowsPtyInfo()
+      .then((info) => {
+        cachedWindowsPtyInfo = info ?? DEFAULT_WINDOWS_PTY_INFO;
+        return cachedWindowsPtyInfo;
+      })
+      .catch(() => {
+        cachedWindowsPtyInfo = DEFAULT_WINDOWS_PTY_INFO;
+        return cachedWindowsPtyInfo;
+      });
+  }
+  return windowsPtyInfoPromise;
+}
+
 function flushTerminalOutput(managed: ManagedTerminal) {
   if (managed.outputQueue.length === 0) return;
 
@@ -101,6 +245,7 @@ function flushTerminalOutput(managed: ManagedTerminal) {
   managed.outputQueue = [];
   managed.queuedOutputBytes = 0;
   managed.terminal.write(mergeChunks(chunks, totalBytes));
+  managed.hasRenderedOutput = true;
 }
 
 function runFlush(managed: ManagedTerminal) {
@@ -109,6 +254,9 @@ function runFlush(managed: ManagedTerminal) {
 }
 
 function scheduleFlush(managed: ManagedTerminal) {
+  if (managed.outputSuspended) {
+    return;
+  }
   if (managed.flushRafId === null) {
     managed.flushRafId = requestAnimationFrame(() => {
       runFlush(managed);
@@ -218,15 +366,21 @@ function ensureEventBridge() {
   return eventBridgePromise;
 }
 
-export function applyTerminalAppearance(fontFamily: string, fontSize: number) {
+export function applyTerminalAppearance(
+  fontFamily: string,
+  fontSize: number,
+  cursorStyle: "block" | "bar" | "underline",
+  cursorColor: string
+) {
   cache.forEach((managed) => {
     managed.terminal.options.fontFamily = fontFamily;
     managed.terminal.options.fontSize = fontSize;
-    try {
-      managed.fitAddon.fit();
-    } catch {
-      // ignore fit errors on hidden terminals
-    }
+    managed.terminal.options.cursorStyle = cursorStyle;
+    managed.terminal.options.theme = {
+      ...BASE_TERMINAL_THEME,
+      cursor: resolveCursorColor(cursorColor),
+    };
+    scheduleManagedFit(managed);
   });
 }
 
@@ -251,6 +405,18 @@ export function getTerminal(
   sessionId: string
 ): ManagedTerminal | undefined {
   return cache.get(sessionId);
+}
+
+export function scheduleTerminalFit(sessionId: string) {
+  const managed = cache.get(sessionId);
+  if (!managed) return;
+  scheduleManagedFit(managed);
+}
+
+export function scheduleTerminalFitAfterResize(sessionId: string) {
+  const managed = cache.get(sessionId);
+  if (!managed) return;
+  scheduleDeferredManagedFit(managed);
 }
 
 /**
@@ -282,35 +448,18 @@ export function acquireTerminal(
   const appearance = getTerminalAppearanceSettings();
   const term = new Terminal({
     theme: {
-      background: "#0d0d0d",
-      foreground: "#e0e0e0",
-      cursor: "#e0e0e0",
-      cursorAccent: "#0d0d0d",
-      black: "#1a1a1a",
-      red: "#f87171",
-      green: "#4ade80",
-      yellow: "#facc15",
-      blue: "#60a5fa",
-      magenta: "#c084fc",
-      cyan: "#34d399",
-      white: "#e0e0e0",
-      brightBlack: "#555",
-      brightRed: "#fca5a5",
-      brightGreen: "#86efac",
-      brightYellow: "#fde047",
-      brightBlue: "#93c5fd",
-      brightMagenta: "#d8b4fe",
-      brightCyan: "#6ee7b7",
-      brightWhite: "#f5f5f5",
+      ...BASE_TERMINAL_THEME,
+      cursor: resolveCursorColor(appearance.cursorColor),
     },
     fontFamily: appearance.fontFamily,
     fontSize: appearance.fontSize,
     lineHeight: 1.2,
     letterSpacing: 0,
     cursorBlink: true,
-    cursorStyle: "block",
+    cursorStyle: appearance.cursorStyle,
     allowProposedApi: true,
     scrollback: 5000,
+    windowsPty: DEFAULT_WINDOWS_PTY_INFO,
   });
 
   const fitAddon = new FitAddon();
@@ -371,13 +520,15 @@ export function acquireTerminal(
     return true;
   });
 
-  // WebGL addon（降级安全）
-  try {
-    const webglAddon = new WebglAddon();
-    webglAddon.onContextLoss(() => webglAddon.dispose());
-    term.loadAddon(webglAddon);
-  } catch {
-    // Canvas fallback
+  // Windows + ConPTY 下优先稳定显示，先禁用 WebGL。
+  if (!DEFAULT_WINDOWS_PTY_INFO) {
+    try {
+      const webglAddon = new WebglAddon();
+      webglAddon.onContextLoss(() => webglAddon.dispose());
+      term.loadAddon(webglAddon);
+    } catch {
+      // Canvas fallback
+    }
   }
 
   const managed: ManagedTerminal = {
@@ -392,9 +543,19 @@ export function acquireTerminal(
     queuedOutputBytes: 0,
     flushRafId: null,
     flushTimerId: null,
+    fitRafId: null,
+    fitTimerId: null,
+    lastPtyCols: term.cols,
+    lastPtyRows: term.rows,
+    outputSuspended: false,
+    hasRenderedOutput: false,
   };
 
   cache.set(sessionId, managed);
+  void ensureWindowsPtyInfo().then((info) => {
+    if (!info || cache.get(sessionId) !== managed) return;
+    applyWindowsPtyInfo(managed, info);
+  });
 
   // ── 创建 PTY ──
   let destroyed = false;
@@ -414,6 +575,9 @@ export function acquireTerminal(
         return;
       }
       bindTerminalId(managed, id);
+      managed.lastPtyCols = cols;
+      managed.lastPtyRows = rows;
+      scheduleManagedFit(managed);
 
       // 执行启动命令
       if (startupCommand) {
@@ -438,19 +602,13 @@ export function acquireTerminal(
     terminalWrite(id, new TextEncoder().encode(data)).catch(console.error);
   });
 
-  // xterm resize → PTY resize
-  const resizeDisposable = term.onResize(({ cols, rows }) => {
-    const id = managed.terminalId;
-    if (!id) return;
-    terminalResize(id, cols, rows).catch(console.error);
-  });
-
   // 保存清理函数
   cleanupFns.set(sessionId, () => {
     destroyed = true;
     dataDisposable.dispose();
-    resizeDisposable.dispose();
     clearFlushHandles(managed);
+    clearFitHandles(managed);
+    managed.outputSuspended = false;
     const id = managed.terminalId;
     if (id) {
       closedTerminalIds.add(id);

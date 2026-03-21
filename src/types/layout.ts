@@ -1,4 +1,8 @@
-import type { CustomTerminalProfile, ShellInfo } from "./terminal";
+import type {
+  CustomTerminalProfile,
+  ShellInfo,
+  TerminalCursorStyle,
+} from "./terminal";
 
 /**
  * 单个终端会话
@@ -133,6 +137,10 @@ export interface AppSettings {
   terminalFontFamily: string;
   /** 终端字号 */
   terminalFontSize: number;
+  /** 终端光标形状 */
+  terminalCursorStyle: TerminalCursorStyle;
+  /** 终端光标颜色；空字符串表示使用默认主题色 */
+  terminalCursorColor: string;
   /** 最近一次手动获取到的系统字体列表 */
   detectedTerminalFonts: string[];
   /** 用户手动添加的终端列表 */

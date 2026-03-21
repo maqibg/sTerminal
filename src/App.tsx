@@ -152,7 +152,9 @@ export function App() {
       updateAppSettings(settings);
       applyTerminalAppearance(
         settings.terminalFontFamily,
-        settings.terminalFontSize
+        settings.terminalFontSize,
+        settings.terminalCursorStyle,
+        settings.terminalCursorColor
       );
       setShowGlobalSettings(false);
       addToast("全局设置已保存", "success");

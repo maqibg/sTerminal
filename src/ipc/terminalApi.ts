@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ShellInfo } from "../types/terminal";
+import type { ShellInfo, WindowsPtyInfo } from "../types/terminal";
 
 /**
  * 创建 PTY 进程，返回分配的终端 ID
@@ -97,4 +97,11 @@ export async function terminalPickDirectory(): Promise<string | null> {
  */
 export async function terminalListFonts(): Promise<string[]> {
   return invoke("terminal_list_fonts");
+}
+
+/**
+ * 获取当前系统的 Windows PTY 兼容信息
+ */
+export async function terminalGetWindowsPtyInfo(): Promise<WindowsPtyInfo | null> {
+  return invoke("terminal_get_windows_pty_info");
 }

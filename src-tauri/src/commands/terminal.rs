@@ -44,6 +44,14 @@ pub struct TerminalExitEvent {
     pub exit_code: i32,
 }
 
+/// Windows 下 xterm 需要的 PTY 兼容信息
+#[derive(Debug, Clone, Serialize)]
+pub struct WindowsPtyInfo {
+    pub backend: String,
+    #[serde(rename = "buildNumber")]
+    pub build_number: Option<u32>,
+}
+
 // ============================================================
 // Tauri Commands（DEV-A 负责 terminal_create / terminal_kill）
 // ============================================================
@@ -184,5 +192,39 @@ pub async fn terminal_list_fonts() -> Result<Vec<String>, String> {
     #[cfg(not(target_os = "windows"))]
     {
         Ok(Vec::new())
+    }
+}
+
+/// 获取当前系统的 Windows PTY 兼容信息
+#[tauri::command]
+pub async fn terminal_get_windows_pty_info() -> Result<Option<WindowsPtyInfo>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::HKEY_LOCAL_MACHINE;
+        use winreg::RegKey;
+
+        let key = RegKey::predef(HKEY_LOCAL_MACHINE)
+            .open_subkey("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion")
+            .map_err(|e| format!("Failed to open Windows version registry: {}", e))?;
+
+        let build_number = key
+            .get_value::<String, _>("CurrentBuildNumber")
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .or_else(|| {
+                key.get_value::<String, _>("CurrentBuild")
+                    .ok()
+                    .and_then(|value| value.parse::<u32>().ok())
+            });
+
+        return Ok(Some(WindowsPtyInfo {
+            backend: "conpty".to_string(),
+            build_number,
+        }));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(None)
     }
 }

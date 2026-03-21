@@ -4,9 +4,11 @@ import type { AppSettings } from "../../types/layout";
 import type {
   CustomTerminalProfile,
   ShellInfo,
+  TerminalCursorStyle,
 } from "../../types/terminal";
 import {
   createEmptyCustomTerminal,
+  DEFAULT_TERMINAL_CURSOR_COLOR,
   DEFAULT_TERMINAL_FONT_FAMILY,
   getTerminalOptions,
   inferShellType,
@@ -18,6 +20,12 @@ import {
 } from "../../ipc/terminalApi";
 
 declare const __APP_VERSION__: string;
+
+const CURSOR_STYLE_OPTIONS: Array<{ value: TerminalCursorStyle; label: string }> = [
+  { value: "block", label: "实心框" },
+  { value: "bar", label: "条形" },
+  { value: "underline", label: "下划线" },
+];
 
 interface GlobalSettingsDialogProps {
   settings: AppSettings;
@@ -55,6 +63,13 @@ export function GlobalSettingsDialog({
   const [terminalFontSize, setTerminalFontSize] = useState(
     String(settings.terminalFontSize)
   );
+  const [terminalCursorStyle, setTerminalCursorStyle] = useState(
+    settings.terminalCursorStyle
+  );
+  const [terminalCursorColor, setTerminalCursorColor] = useState(
+    settings.terminalCursorColor
+  );
+  const [cursorDropdownOpen, setCursorDropdownOpen] = useState(false);
   const [enableRightClickCommandPaste, setEnableRightClickCommandPaste] = useState(
     settings.enableRightClickCommandPaste
   );
@@ -75,6 +90,9 @@ export function GlobalSettingsDialog({
     setFontQuery("");
     setFontDropdownOpen(false);
     setTerminalFontSize(String(settings.terminalFontSize));
+    setTerminalCursorStyle(settings.terminalCursorStyle);
+    setTerminalCursorColor(settings.terminalCursorColor);
+    setCursorDropdownOpen(false);
     setEnableRightClickCommandPaste(settings.enableRightClickCommandPaste);
     setCustomTerminals(settings.customTerminals);
     setError("");
@@ -114,6 +132,9 @@ export function GlobalSettingsDialog({
     terminalFontFamily === DEFAULT_TERMINAL_FONT_FAMILY
       ? "默认字体（Cascadia Code 优先）"
       : terminalFontFamily;
+  const displayCursorLabel =
+    CURSOR_STYLE_OPTIONS.find((option) => option.value === terminalCursorStyle)?.label ??
+    "实心框";
 
   async function handleSave() {
     const normalizedCustom = customTerminals.map((terminal) => ({
@@ -154,6 +175,15 @@ export function GlobalSettingsDialog({
       return;
     }
 
+    const normalizedCursorColor = terminalCursorColor.trim();
+    if (
+      normalizedCursorColor &&
+      !/^#(?:[0-9a-fA-F]{3}){1,2}$/.test(normalizedCursorColor)
+    ) {
+      setError("光标颜色必须是有效的十六进制颜色值，例如 #4ade80。");
+      return;
+    }
+
     const fallbackSystemId = systemShells[0] ? systemTerminalId(systemShells[0]) : "";
     const nextDefaultId =
       defaultTerminalId || normalizedCustom[0]?.id || fallbackSystemId;
@@ -172,6 +202,8 @@ export function GlobalSettingsDialog({
       defaultWorkingDirectory: defaultWorkingDirectory.trim(),
       terminalFontFamily: terminalFontFamily.trim(),
       terminalFontSize: parsedFontSize,
+      terminalCursorStyle,
+      terminalCursorColor: normalizedCursorColor,
       detectedTerminalFonts: availableFonts,
       customTerminals: normalizedCustom,
       detectedSystemTerminals: systemShells,
@@ -418,6 +450,68 @@ export function GlobalSettingsDialog({
             placeholder="13"
             style={inputStyle}
           />
+
+          <label style={labelStyle}>光标形状</label>
+          <div style={fontPickerWrapStyle}>
+            <input
+              type="text"
+              value={displayCursorLabel}
+              onFocus={() => setCursorDropdownOpen(true)}
+              onClick={() => setCursorDropdownOpen(true)}
+              onBlur={() => {
+                setTimeout(() => {
+                  setCursorDropdownOpen(false);
+                }, 120);
+              }}
+              readOnly
+              style={inputStyle}
+            />
+            {cursorDropdownOpen && (
+              <div style={fontDropdownStyle}>
+                {CURSOR_STYLE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    style={fontOptionStyle(terminalCursorStyle === option.value)}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      setTerminalCursorStyle(option.value);
+                      setCursorDropdownOpen(false);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <label style={labelStyle}>光标颜色</label>
+          <div style={sectionHeaderStyle}>
+            <div style={fontHintStyle}>
+              留空使用默认主题颜色
+            </div>
+            <button
+              style={secondaryActionBtnStyle}
+              onClick={() => setTerminalCursorColor(DEFAULT_TERMINAL_CURSOR_COLOR)}
+            >
+              恢复默认
+            </button>
+          </div>
+          <div style={inlineRowStyle}>
+            <input
+              type="color"
+              value={terminalCursorColor || "#e0e0e0"}
+              onChange={(event) => setTerminalCursorColor(event.target.value)}
+              style={colorInputStyle}
+            />
+            <input
+              type="text"
+              value={terminalCursorColor}
+              onChange={(event) => setTerminalCursorColor(event.target.value)}
+              placeholder="#e0e0e0"
+              style={{ ...inputStyle, flex: 1, marginBottom: 0 }}
+            />
+          </div>
 
           <label style={checkboxRowStyle}>
             <input
@@ -732,6 +826,16 @@ const inlineRowStyle: React.CSSProperties = {
   gap: 8,
   alignItems: "center",
   marginBottom: 12,
+};
+
+const colorInputStyle: React.CSSProperties = {
+  width: 44,
+  minWidth: 44,
+  height: 36,
+  padding: 2,
+  background: "#1a1a1a",
+  border: "1px solid #444",
+  borderRadius: 4,
 };
 
 const checkboxRowStyle: React.CSSProperties = {

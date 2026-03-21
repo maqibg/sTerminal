@@ -40,6 +40,10 @@ pub struct AppSettings {
     pub terminal_font_family: String,
     #[serde(rename = "terminalFontSize", default = "default_terminal_font_size")]
     pub terminal_font_size: u16,
+    #[serde(rename = "terminalCursorStyle", default = "default_terminal_cursor_style")]
+    pub terminal_cursor_style: String,
+    #[serde(rename = "terminalCursorColor", default)]
+    pub terminal_cursor_color: String,
     #[serde(rename = "detectedTerminalFonts", default)]
     pub detected_terminal_fonts: Vec<String>,
     #[serde(rename = "customTerminals", default)]
@@ -65,6 +69,10 @@ fn default_terminal_font_size() -> u16 {
     13
 }
 
+fn default_terminal_cursor_style() -> String {
+    "block".to_string()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -73,6 +81,8 @@ impl Default for AppSettings {
             default_working_directory: String::new(),
             terminal_font_family: default_terminal_font_family(),
             terminal_font_size: default_terminal_font_size(),
+            terminal_cursor_style: default_terminal_cursor_style(),
+            terminal_cursor_color: String::new(),
             detected_terminal_fonts: Vec::new(),
             custom_terminals: Vec::new(),
             detected_system_terminals: Vec::new(),

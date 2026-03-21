@@ -37,6 +37,11 @@ export interface ShellInfo {
 }
 
 /**
+ * 终端光标形状
+ */
+export type TerminalCursorStyle = "block" | "bar" | "underline";
+
+/**
  * 用户自定义终端配置（持久化）
  */
 export interface CustomTerminalProfile {
@@ -70,6 +75,16 @@ export interface TerminalOption {
   source: "system" | "custom";
   /** 是否为系统默认终端 */
   isDefault: boolean;
+}
+
+/**
+ * Windows 下 xterm 与 PTY 的兼容信息
+ */
+export interface WindowsPtyInfo {
+  /** 当前使用的 Windows PTY 后端 */
+  backend: "conpty" | "winpty";
+  /** Windows build 号，如 19045 / 22631 */
+  buildNumber?: number;
 }
 
 /**

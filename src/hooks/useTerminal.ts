@@ -5,6 +5,8 @@ import {
   detachTerminal,
   destroyTerminal,
   getTerminal,
+  scheduleTerminalFitAfterResize,
+  scheduleTerminalFit,
   subscribeTerminal,
 } from "../terminal/terminalInstances";
 import { terminalWrite } from "../ipc/terminalApi";
@@ -49,20 +51,12 @@ export function useTerminal({
 
     // 初始 fit
     requestAnimationFrame(() => {
-      try {
-        managed.fitAddon.fit();
-      } catch {
-        // 容器不可见时忽略
-      }
+      scheduleTerminalFit(panelId);
     });
 
     // 监听容器尺寸变化
     const observer = new ResizeObserver(() => {
-      try {
-        managed.fitAddon.fit();
-      } catch {
-        // ignore
-      }
+      scheduleTerminalFitAfterResize(panelId);
     });
     observer.observe(host);
 

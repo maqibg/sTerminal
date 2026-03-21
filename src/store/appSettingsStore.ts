@@ -7,6 +7,7 @@ import type {
 import type {
   CustomTerminalProfile,
   ShellInfo,
+  TerminalCursorStyle,
   TerminalOption,
 } from "../types/terminal";
 
@@ -14,6 +15,8 @@ export const DEFAULT_TERMINAL_FONT_FAMILY =
   '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, "Courier New", monospace';
 
 export const DEFAULT_TERMINAL_FONT_SIZE = 13;
+export const DEFAULT_TERMINAL_CURSOR_STYLE: TerminalCursorStyle = "block";
+export const DEFAULT_TERMINAL_CURSOR_COLOR = "";
 
 const DEFAULT_SETTINGS: AppSettings = {
   defaultShell: "powershell",
@@ -21,6 +24,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultWorkingDirectory: "",
   terminalFontFamily: DEFAULT_TERMINAL_FONT_FAMILY,
   terminalFontSize: DEFAULT_TERMINAL_FONT_SIZE,
+  terminalCursorStyle: DEFAULT_TERMINAL_CURSOR_STYLE,
+  terminalCursorColor: DEFAULT_TERMINAL_CURSOR_COLOR,
   detectedTerminalFonts: [],
   customTerminals: [],
   detectedSystemTerminals: [],
@@ -145,6 +150,8 @@ export function getTerminalAppearanceSettings() {
   return {
     fontFamily: settings.terminalFontFamily,
     fontSize: settings.terminalFontSize,
+    cursorStyle: settings.terminalCursorStyle,
+    cursorColor: settings.terminalCursorColor,
   };
 }
 
