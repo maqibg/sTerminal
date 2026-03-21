@@ -11,6 +11,7 @@ import { destroyTerminal, getTerminal } from "../../terminal/terminalInstances";
 import { terminalGetCwd, terminalWrite } from "../../ipc/terminalApi";
 import { getDragPayload, endDrag } from "../../utils/tabDragState";
 import { useConfirm } from "../../hooks/useConfirm";
+import { useAppSettingsStore } from "../../store/appSettingsStore";
 
 const DRAG_MIME = "application/sterminal-tab";
 
@@ -149,6 +150,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({ leaf }) => {
   const updateTabConfig = useLayoutStore((s) => s.updateTabConfig);
   const moveTab = useLayoutStore((s) => s.moveTab);
   const moveTabToNewSplit = useLayoutStore((s) => s.moveTabToNewSplit);
+  const settings = useAppSettingsStore((s) => s.settings);
 
   const panelCount = countLeaves(layoutTree);
   const isLastPanel = panelCount <= 1 && leaf.tabs.length <= 1;
@@ -159,6 +161,15 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({ leaf }) => {
     e: React.MouseEvent,
     methods: TerminalMethods
   ) => {
+    if (
+      settings.enableRightClickCommandPaste &&
+      !e.shiftKey
+    ) {
+      void methods.pasteFromClipboard();
+      setContextMenu(null);
+      return;
+    }
+
     setContextMenu({ x: e.clientX, y: e.clientY, ...methods });
   };
 

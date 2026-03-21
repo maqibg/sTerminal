@@ -141,6 +141,6 @@ export interface AppSettings {
   detectedSystemTerminals: ShellInfo[];
   /** 常用命令分组 */
   commandGroups: CommandGroup[];
-  /** 右键一键粘贴常用命令是否启用 */
+  /** 右键是否直接粘贴剪贴板；Shift+右键仍打开菜单 */
   enableRightClickCommandPaste: boolean;
 }

@@ -425,7 +425,7 @@ export function GlobalSettingsDialog({
               checked={enableRightClickCommandPaste}
               onChange={(event) => setEnableRightClickCommandPaste(event.target.checked)}
             />
-            <span>启用右键一键粘贴常用命令</span>
+            <span>启用右键直接粘贴剪贴板（Shift+右键打开菜单）</span>
           </label>
 
           <div style={sectionStyle}>

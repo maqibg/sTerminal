@@ -32,6 +32,10 @@ export interface ManagedTerminal {
   terminalId: string | null;
   isAlive: boolean;
   exitCode: number | undefined;
+  outputQueue: Uint8Array[];
+  queuedOutputBytes: number;
+  flushRafId: number | null;
+  flushTimerId: ReturnType<typeof setTimeout> | null;
 }
 
 /** session ID → 实例 */
@@ -55,9 +59,81 @@ let eventBridgePromise: Promise<void> | null = null;
 
 /** 组件 detach 后等待多久才真正销毁（ms） */
 const DESTROY_DELAY = 5_000;
+/** 正常情况下每帧最多 flush 一次；隐藏窗口时由 timeout 兜底 */
+const OUTPUT_FLUSH_INTERVAL_MS = 16;
+/** 防止前端输出队列在长文本洪峰时无限增长 */
+const MAX_QUEUED_OUTPUT_BYTES = 256 * 1024;
 
 function notifyListeners(sessionId: string) {
   stateListeners.get(sessionId)?.forEach((fn) => fn());
+}
+
+function mergeChunks(chunks: Uint8Array[], totalBytes: number): Uint8Array {
+  if (chunks.length === 1) {
+    return chunks[0];
+  }
+
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  chunks.forEach((chunk) => {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  });
+  return merged;
+}
+
+function clearFlushHandles(managed: ManagedTerminal) {
+  if (managed.flushRafId !== null) {
+    cancelAnimationFrame(managed.flushRafId);
+    managed.flushRafId = null;
+  }
+  if (managed.flushTimerId !== null) {
+    clearTimeout(managed.flushTimerId);
+    managed.flushTimerId = null;
+  }
+}
+
+function flushTerminalOutput(managed: ManagedTerminal) {
+  if (managed.outputQueue.length === 0) return;
+
+  const chunks = managed.outputQueue;
+  const totalBytes = managed.queuedOutputBytes;
+  managed.outputQueue = [];
+  managed.queuedOutputBytes = 0;
+  managed.terminal.write(mergeChunks(chunks, totalBytes));
+}
+
+function runFlush(managed: ManagedTerminal) {
+  clearFlushHandles(managed);
+  flushTerminalOutput(managed);
+}
+
+function scheduleFlush(managed: ManagedTerminal) {
+  if (managed.flushRafId === null) {
+    managed.flushRafId = requestAnimationFrame(() => {
+      runFlush(managed);
+    });
+  }
+  if (managed.flushTimerId === null) {
+    managed.flushTimerId = setTimeout(() => {
+      runFlush(managed);
+    }, OUTPUT_FLUSH_INTERVAL_MS);
+  }
+}
+
+function enqueueTerminalOutput(managed: ManagedTerminal, data: Uint8Array) {
+  if (data.byteLength === 0) return;
+
+  managed.outputQueue.push(data);
+  managed.queuedOutputBytes += data.byteLength;
+
+  if (managed.queuedOutputBytes >= MAX_QUEUED_OUTPUT_BYTES) {
+    clearFlushHandles(managed);
+    flushTerminalOutput(managed);
+    return;
+  }
+
+  scheduleFlush(managed);
 }
 
 function enqueuePendingOutput(terminalId: string, data: Uint8Array) {
@@ -76,12 +152,14 @@ function flushPendingOutput(managed: ManagedTerminal) {
   const queue = pendingOutput.get(terminalId);
   if (queue) {
     pendingOutput.delete(terminalId);
-    queue.forEach((chunk) => managed.terminal.write(chunk));
+    queue.forEach((chunk) => enqueueTerminalOutput(managed, chunk));
   }
 
   const exitCode = pendingExit.get(terminalId);
   if (exitCode !== undefined) {
     pendingExit.delete(terminalId);
+    clearFlushHandles(managed);
+    flushTerminalOutput(managed);
     managed.isAlive = false;
     managed.exitCode = exitCode;
     notifyListeners(managed.sessionId);
@@ -110,7 +188,7 @@ function ensureEventBridge() {
       const data = new Uint8Array(event.payload.data);
       const managed = terminalsById.get(event.payload.terminalId);
       if (managed) {
-        managed.terminal.write(data);
+        enqueueTerminalOutput(managed, data);
         return;
       }
       enqueuePendingOutput(event.payload.terminalId, data);
@@ -121,6 +199,8 @@ function ensureEventBridge() {
       }
       const managed = terminalsById.get(event.payload.terminalId);
       if (managed) {
+        clearFlushHandles(managed);
+        flushTerminalOutput(managed);
         managed.isAlive = false;
         managed.exitCode = event.payload.exitCode;
         notifyListeners(managed.sessionId);
@@ -308,6 +388,10 @@ export function acquireTerminal(
     terminalId: null,
     isAlive: true,
     exitCode: undefined,
+    outputQueue: [],
+    queuedOutputBytes: 0,
+    flushRafId: null,
+    flushTimerId: null,
   };
 
   cache.set(sessionId, managed);
@@ -366,6 +450,7 @@ export function acquireTerminal(
     destroyed = true;
     dataDisposable.dispose();
     resizeDisposable.dispose();
+    clearFlushHandles(managed);
     const id = managed.terminalId;
     if (id) {
       closedTerminalIds.add(id);
@@ -374,6 +459,8 @@ export function acquireTerminal(
       pendingExit.delete(id);
       terminalKill(id).catch(console.error);
     }
+    managed.outputQueue = [];
+    managed.queuedOutputBytes = 0;
     term.dispose();
   });
 
