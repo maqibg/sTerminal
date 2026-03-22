@@ -61,6 +61,22 @@ impl PtyProcess {
         let mut cmd = CommandBuilder::new(&shell_path);
         cmd.cwd(&working_directory);
 
+        // 设置 TERM 环境变量，确保 shell 正确识别终端能力（键绑定、颜色等）
+        // macOS 从 Dock 启动时继承的是 launchd 的最小环境，不包含 TERM
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
+
+        // Unix 下以 login shell 启动，确保加载用户配置（~/.zshrc 等）
+        #[cfg(not(target_os = "windows"))]
+        {
+            let lower = shell_path.to_lowercase();
+            if lower.ends_with("bash") || lower.ends_with("zsh") {
+                cmd.arg("-l");
+            } else if lower.ends_with("fish") {
+                cmd.arg("--login");
+            }
+        }
+
         // 在 slave 端启动子进程
         let child = pair
             .slave
