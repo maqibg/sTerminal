@@ -211,14 +211,159 @@ impl PtyProcess {
 
     #[cfg(target_os = "windows")]
     fn get_cwd_impl(&self) -> Result<String, String> {
-        // Windows 平台：通过 NtQueryInformationProcess 获取 cwd 较复杂
-        // 简单方案：返回初始工作目录作为回退
-        // 调用方 (terminal_get_cwd) 会在 Err 时也使用此值，直接返回 Ok
-        Ok(self.initial_cwd.clone())
+        if self.pid == 0 {
+            return Ok(self.initial_cwd.clone());
+        }
+        match win_cwd::get_process_cwd(self.pid) {
+            Some(cwd) if !cwd.is_empty() => Ok(cwd),
+            _ => Ok(self.initial_cwd.clone()),
+        }
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     fn get_cwd_impl(&self) -> Result<String, String> {
         Ok(self.initial_cwd.clone())
+    }
+}
+
+/// Windows 平台：通过 NtQueryInformationProcess + ReadProcessMemory
+/// 读取目标进程 PEB 中的 CurrentDirectory，获取运行时 CWD
+#[cfg(target_os = "windows")]
+mod win_cwd {
+    use std::ffi::c_void;
+    use std::mem;
+    use std::ptr;
+
+    type HANDLE = *mut c_void;
+
+    const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+    const PROCESS_VM_READ: u32 = 0x0010;
+
+    #[repr(C)]
+    struct ProcessBasicInformation {
+        reserved1: usize,
+        peb_base_address: usize,
+        reserved2: [usize; 2],
+        unique_process_id: usize,
+        reserved3: usize,
+    }
+
+    extern "system" {
+        fn OpenProcess(desired_access: u32, inherit_handle: i32, process_id: u32) -> HANDLE;
+        fn CloseHandle(handle: HANDLE) -> i32;
+        fn ReadProcessMemory(
+            process: HANDLE,
+            base_address: *const c_void,
+            buffer: *mut c_void,
+            size: usize,
+            bytes_read: *mut usize,
+        ) -> i32;
+    }
+
+    #[link(name = "ntdll")]
+    extern "system" {
+        fn NtQueryInformationProcess(
+            process_handle: HANDLE,
+            process_information_class: u32,
+            process_information: *mut c_void,
+            process_information_length: u32,
+            return_length: *mut u32,
+        ) -> i32;
+    }
+
+    /// 从目标进程内存中读取一个 T 类型的值
+    unsafe fn read_remote<T>(handle: HANDLE, address: usize) -> Option<T> {
+        let mut value: T = mem::zeroed();
+        let mut bytes_read: usize = 0;
+        let ok = ReadProcessMemory(
+            handle,
+            address as *const c_void,
+            &mut value as *mut T as *mut c_void,
+            mem::size_of::<T>(),
+            &mut bytes_read,
+        );
+        if ok != 0 && bytes_read == mem::size_of::<T>() {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_process_cwd(pid: u32) -> Option<String> {
+        unsafe {
+            let handle =
+                OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid);
+            if handle.is_null() {
+                return None;
+            }
+            let result = read_cwd(handle);
+            CloseHandle(handle);
+            result
+        }
+    }
+
+    unsafe fn read_cwd(handle: HANDLE) -> Option<String> {
+        // 1) 通过 NtQueryInformationProcess(ProcessBasicInformation) 拿到 PEB 地址
+        let mut pbi: ProcessBasicInformation = mem::zeroed();
+        let status = NtQueryInformationProcess(
+            handle,
+            0, // ProcessBasicInformation
+            &mut pbi as *mut _ as *mut c_void,
+            mem::size_of::<ProcessBasicInformation>() as u32,
+            ptr::null_mut(),
+        );
+        if status != 0 {
+            return None;
+        }
+
+        // 2) 从 PEB 读取 ProcessParameters 指针
+        //    x64: PEB + 0x20   x86: PEB + 0x10
+        let params_offset: usize = if mem::size_of::<usize>() == 8 { 0x20 } else { 0x10 };
+        let process_params: usize =
+            read_remote(handle, pbi.peb_base_address + params_offset)?;
+
+        // 3) 从 RTL_USER_PROCESS_PARAMETERS 读取 CurrentDirectory.DosPath (UNICODE_STRING)
+        //    x64: offset 0x38   x86: offset 0x24
+        let curdir_offset: usize = if mem::size_of::<usize>() == 8 { 0x38 } else { 0x24 };
+        let base = process_params + curdir_offset;
+
+        // UNICODE_STRING.Length (u16)
+        let length: u16 = read_remote(handle, base)?;
+        if length == 0 {
+            return None;
+        }
+
+        // UNICODE_STRING.Buffer 指针
+        //   x64: 跳过 Length(2) + MaximumLength(2) + padding(4) = +8
+        //   x86: 跳过 Length(2) + MaximumLength(2) = +4
+        let buf_ptr_offset: usize = if mem::size_of::<usize>() == 8 { 8 } else { 4 };
+        let buffer_ptr: usize = read_remote(handle, base + buf_ptr_offset)?;
+        if buffer_ptr == 0 {
+            return None;
+        }
+
+        // 4) 读取路径字符串 (UTF-16)
+        let char_count = length as usize / 2;
+        let mut buf = vec![0u16; char_count];
+        let mut bytes_read: usize = 0;
+        let ok = ReadProcessMemory(
+            handle,
+            buffer_ptr as *const c_void,
+            buf.as_mut_ptr() as *mut c_void,
+            length as usize,
+            &mut bytes_read,
+        );
+        if ok == 0 {
+            return None;
+        }
+
+        let path = String::from_utf16_lossy(&buf);
+        // 去除末尾反斜杠，但保留盘符根目录如 "C:\"
+        let trimmed = path.trim_end_matches('\\');
+        if trimmed.len() == 2 && trimmed.as_bytes().get(1) == Some(&b':') {
+            Some(format!("{}\\", trimmed))
+        } else {
+            Some(trimmed.to_string())
+        }
     }
 }
