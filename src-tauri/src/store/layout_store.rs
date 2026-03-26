@@ -125,24 +125,26 @@ impl LayoutStore {
     // 内部辅助方法
     // ----------------------------------------------------------
 
-    /// 读取所有布局
+    /// 读取所有布局（从磁盘重新加载，确保多实例同步）
     fn read_layouts(&self) -> Result<Vec<SavedLayout>, String> {
         let store = self
             .app
             .store(STORE_FILE)
             .map_err(|e| format!("Failed to open store: {}", e))?;
+        let _ = store.reload();
         match store.get(LAYOUTS_KEY) {
             Some(v) => serde_json::from_value(v).map_err(|e| format!("Failed to parse layouts: {}", e)),
             None => Ok(Vec::new()),
         }
     }
 
-    /// 写入所有布局
+    /// 写入所有布局（写前 reload，避免覆盖其他实例的修改）
     fn write_layouts(&self, layouts: &[SavedLayout]) -> Result<(), String> {
         let store = self
             .app
             .store(STORE_FILE)
             .map_err(|e| format!("Failed to open store: {}", e))?;
+        let _ = store.reload();
         let value = serde_json::to_value(layouts).map_err(|e| format!("Serialization error: {}", e))?;
         store.set(LAYOUTS_KEY, value);
         store.save().map_err(|e| format!("Failed to save store: {}", e))?;
@@ -293,12 +295,13 @@ impl LayoutStore {
         }
     }
 
-    /// 保存应用设置
+    /// 保存应用设置（写前 reload，避免覆盖其他实例的修改）
     pub async fn save_settings(&self, settings: AppSettings) -> Result<(), String> {
         let store = self
             .app
             .store(STORE_FILE)
             .map_err(|e| format!("Failed to open store: {}", e))?;
+        let _ = store.reload();
         let value = serde_json::to_value(&settings)
             .map_err(|e| format!("Serialization error: {}", e))?;
         store.set(SETTINGS_KEY, value);
