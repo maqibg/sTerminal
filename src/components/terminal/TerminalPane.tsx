@@ -172,8 +172,8 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({ leaf }) => {
     [activeSession.id, leaf.id, updateTabConfig]
   );
 
-  const handleDuplicate = useCallback(async () => {
-    // 尝试获取终端运行时 cwd
+  /** 获取当前终端运行时 CWD */
+  const getActiveCwd = useCallback(async () => {
     let cwd = activeSession.workingDirectory;
     const managed = getTerminal(activeSession.id);
     if (managed?.terminalId) {
@@ -183,12 +183,27 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({ leaf }) => {
         // 回退到 session 记录的初始目录
       }
     }
+    return cwd;
+  }, [activeSession]);
+
+  const handleDuplicate = useCallback(async () => {
+    const cwd = await getActiveCwd();
     duplicatePanel(leaf.id, "horizontal", {
       shellType: activeSession.shellType,
       shellPath: activeSession.shellPath,
       workingDirectory: cwd,
     });
-  }, [activeSession, leaf.id, duplicatePanel]);
+  }, [activeSession, leaf.id, duplicatePanel, getActiveCwd]);
+
+  const handleSplitHorizontal = useCallback(async () => {
+    const cwd = await getActiveCwd();
+    splitPanel(leaf.id, "horizontal", { workingDirectory: cwd });
+  }, [leaf.id, splitPanel, getActiveCwd]);
+
+  const handleSplitVertical = useCallback(async () => {
+    const cwd = await getActiveCwd();
+    splitPanel(leaf.id, "vertical", { workingDirectory: cwd });
+  }, [leaf.id, splitPanel, getActiveCwd]);
 
   // ── 面板级 drop zone ──
 
@@ -311,8 +326,8 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({ leaf }) => {
           isLastPanel={isLastPanel}
           onCopy={contextMenu.copySelection}
           onPaste={contextMenu.pasteFromClipboard}
-          onSplitHorizontal={() => splitPanel(leaf.id, "horizontal")}
-          onSplitVertical={() => splitPanel(leaf.id, "vertical")}
+          onSplitHorizontal={handleSplitHorizontal}
+          onSplitVertical={handleSplitVertical}
           onDuplicate={handleDuplicate}
           onSettings={() => setShowSettings(true)}
           onClose={() => closePanel(leaf.id)}
