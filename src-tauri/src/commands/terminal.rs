@@ -113,6 +113,12 @@ pub async fn terminal_get_cwd(
     state.get_cwd(&terminal_id).await
 }
 
+/// 获取 CLI 启动目录（consume-once：首次调用返回路径，后续返回 null）
+#[tauri::command]
+pub fn get_startup_dir(state: State<'_, crate::StartupDir>) -> Option<String> {
+    state.0.lock().ok().and_then(|mut dir| dir.take())
+}
+
 /// 列出当前系统上可用的 Shell 可执行路径列表
 /// DEV-B 实现：调用 shell::detector::detect_available_shells
 #[tauri::command]

@@ -70,6 +70,13 @@ export async function terminalGetCwd(terminalId: string): Promise<string> {
 }
 
 /**
+ * 获取 CLI 启动目录（consume-once：首次调用返回路径，后续返回 null）
+ */
+export async function getStartupDir(): Promise<string | null> {
+  return invoke("get_startup_dir");
+}
+
+/**
  * 列出当前系统上可用的 Shell 可执行路径列表
  *
  * @returns 可用 Shell 列表（至少包含系统默认 Shell）

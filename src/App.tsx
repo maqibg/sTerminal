@@ -15,8 +15,9 @@ import { useLayoutStore } from "./store/layoutStore";
 import { useSettingsStore } from "./store/settingsStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { layoutUpdate } from "./ipc/layoutApi";
-import { collectLeaves } from "./utils/layoutTree";
-import { refitAll } from "./terminal/terminalInstances";
+import { collectLeaves, findLeafById } from "./utils/layoutTree";
+import { refitAll, getTerminal } from "./terminal/terminalInstances";
+import { terminalGetCwd } from "./ipc/terminalApi";
 import { checkForUpdate, type UpdateInfo } from "./utils/updateChecker";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { LayoutNode, AppSettings } from "./types/layout";
@@ -151,16 +152,35 @@ export function App() {
     [updateSettings, closeSettings, addToast]
   );
 
+  /** 获取焦点面板的运行时 CWD */
+  const getFocusedCwd = useCallback(async () => {
+    if (!focusPanelId) return "";
+    const leaf = findLeafById(layoutTree, focusPanelId);
+    if (!leaf) return "";
+    const session = leaf.tabs.find((t) => t.id === leaf.activeTabId) ?? leaf.tabs[0];
+    const managed = getTerminal(session.id);
+    if (managed?.terminalId) {
+      try { return await terminalGetCwd(managed.terminalId); } catch {}
+    }
+    return session.workingDirectory;
+  }, [focusPanelId, layoutTree]);
+
   // 快捷键：操作当前焦点面板
   useKeyboardShortcuts({
-    onSplitHorizontal: () => {
-      if (focusPanelId) splitPanel(focusPanelId, "horizontal");
+    onSplitHorizontal: async () => {
+      if (!focusPanelId) return;
+      const cwd = await getFocusedCwd();
+      splitPanel(focusPanelId, "horizontal", { workingDirectory: cwd });
     },
-    onSplitVertical: () => {
-      if (focusPanelId) splitPanel(focusPanelId, "vertical");
+    onSplitVertical: async () => {
+      if (!focusPanelId) return;
+      const cwd = await getFocusedCwd();
+      splitPanel(focusPanelId, "vertical", { workingDirectory: cwd });
     },
-    onDuplicate: () => {
-      if (focusPanelId) duplicatePanel(focusPanelId, "horizontal");
+    onDuplicate: async () => {
+      if (!focusPanelId) return;
+      const cwd = await getFocusedCwd();
+      duplicatePanel(focusPanelId, "horizontal", { workingDirectory: cwd });
     },
     onClose: () => {
       if (focusPanelId) closePanel(focusPanelId);
