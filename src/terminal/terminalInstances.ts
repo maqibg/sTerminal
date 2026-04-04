@@ -16,6 +16,7 @@ import {
   terminalWrite,
   terminalResize,
   terminalKill,
+  getStartupDir,
 } from "../ipc/terminalApi";
 import { useSettingsStore, settingsReady } from "../store/settingsStore";
 import type {
@@ -238,9 +239,12 @@ export function acquireTerminal(
       // await 恢复后 rAF 的 fit 可能尚未执行，手动 fit 确保尺寸准确
       try { fitAddon.fit(); } catch { /* 容器不可见时忽略 */ }
 
+      // CLI 启动目录优先（consume-once，仅首个终端生效）
+      const cliDir = await getStartupDir();
+
       const { settings } = useSettingsStore.getState();
       const effectiveShellPath = shellPath || settings.defaultShellPath || "";
-      const effectiveWorkDir = workingDirectory || settings.defaultWorkingDirectory || "";
+      const effectiveWorkDir = cliDir || workingDirectory || settings.defaultWorkingDirectory || "";
       const { cols, rows } = term;
       const id = await terminalCreate(
         effectiveShellPath,
