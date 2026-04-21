@@ -47,6 +47,12 @@ const stateListeners = new Map<string, Set<() => void>>();
 /** 组件 detach 后等待多久才真正销毁（ms） */
 const DESTROY_DELAY = 5_000;
 
+/** 终端字体默认值 */
+export const DEFAULT_FONT_FAMILY =
+  '"JetBrainsMono NFM", "JetBrainsMono NF", "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, "Courier New", monospace';
+export const DEFAULT_FONT_SIZE = 13;
+export const DEFAULT_LINE_HEIGHT = 1.2;
+
 function notifyListeners(sessionId: string) {
   stateListeners.get(sessionId)?.forEach((fn) => fn());
 }
@@ -112,6 +118,17 @@ export function acquireTerminal(
   container.className = "terminal-container";
   container.style.cssText = "flex:1;overflow:hidden;min-height:0;";
 
+  // ── 读取用户字体设置（若设置尚未加载则回退默认值）──
+  const { settings: currentSettings, loaded: settingsLoaded } =
+    useSettingsStore.getState();
+  const fontFamily =
+    (settingsLoaded && currentSettings.fontFamily?.trim()) ||
+    DEFAULT_FONT_FAMILY;
+  const fontSize =
+    (settingsLoaded && currentSettings.fontSize) || DEFAULT_FONT_SIZE;
+  const lineHeight =
+    (settingsLoaded && currentSettings.lineHeight) || DEFAULT_LINE_HEIGHT;
+
   // ── 创建 xterm ──
   const term = new Terminal({
     theme: {
@@ -136,10 +153,9 @@ export function acquireTerminal(
       brightCyan: "#6ee7b7",
       brightWhite: "#f5f5f5",
     },
-    fontFamily:
-      '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, "Courier New", monospace',
-    fontSize: 13,
-    lineHeight: 1.2,
+    fontFamily,
+    fontSize,
+    lineHeight,
     letterSpacing: 0,
     cursorBlink: true,
     cursorStyle: "block",

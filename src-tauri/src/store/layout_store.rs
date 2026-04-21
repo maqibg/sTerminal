@@ -87,6 +87,15 @@ pub struct AppSettings {
     /// 默认初始工作目录，空字符串使用 Home 目录
     #[serde(rename = "defaultWorkingDirectory")]
     pub default_working_directory: String,
+    /// 终端字体族，空/缺省表示使用内置默认值
+    #[serde(rename = "fontFamily", default, skip_serializing_if = "Option::is_none")]
+    pub font_family: Option<String>,
+    /// 终端字号
+    #[serde(rename = "fontSize", default, skip_serializing_if = "Option::is_none")]
+    pub font_size: Option<f32>,
+    /// 终端行高倍数
+    #[serde(rename = "lineHeight", default, skip_serializing_if = "Option::is_none")]
+    pub line_height: Option<f32>,
     /// 常用命令分组列表
     #[serde(rename = "commandGroups", default)]
     pub command_groups: Vec<CommandGroup>,
@@ -98,6 +107,9 @@ impl Default for AppSettings {
             default_shell: String::new(),
             default_shell_path: String::new(),
             default_working_directory: String::new(),
+            font_family: None,
+            font_size: None,
+            line_height: None,
             command_groups: Vec::new(),
         }
     }

@@ -139,6 +139,12 @@ export interface AppSettings {
   defaultShellPath: string;
   /** 默认初始工作目录绝对路径，空字符串表示使用用户 Home 目录 */
   defaultWorkingDirectory: string;
+  /** 终端字体族，空字符串表示使用内置默认值 */
+  fontFamily?: string;
+  /** 终端字号，未设置表示使用内置默认值 13 */
+  fontSize?: number;
+  /** 终端行高倍数，未设置表示使用内置默认值 1.2 */
+  lineHeight?: number;
   /** 常用命令分组列表 */
   commandGroups: CommandGroup[];
 }

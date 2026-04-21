@@ -39,8 +39,8 @@
 
   /* 字体 */
   --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas,
-    "Courier New", monospace;
+  --font-mono: "JetBrainsMono NFM", "JetBrainsMono NF", "Cascadia Code",
+    "Fira Code", "JetBrains Mono", Consolas, "Courier New", monospace;
 
   /* 尺寸 */
   --titlebar-height: 36px;

@@ -3,12 +3,64 @@ import { getVersion } from "@tauri-apps/api/app";
 import type { AppSettings } from "../../types/layout";
 import type { ShellInfo } from "../../types/terminal";
 import { shellListAvailable } from "../../ipc/terminalApi";
+import {
+  DEFAULT_FONT_FAMILY,
+  DEFAULT_FONT_SIZE,
+  DEFAULT_LINE_HEIGHT,
+} from "../../terminal/terminalInstances";
 
 interface AppSettingsDialogProps {
   settings: AppSettings;
   onSave: (settings: AppSettings) => void;
   onCancel: () => void;
 }
+
+/** 预设等宽字体，label 仅作展示，value 为实际 font-family 字符串 */
+const FONT_PRESETS: { label: string; value: string }[] = [
+  { label: "默认 (JetBrains Mono Nerd Font)", value: "" },
+  {
+    label: "JetBrains Mono",
+    value: '"JetBrains Mono", Consolas, monospace',
+  },
+  {
+    label: "Cascadia Code",
+    value: '"Cascadia Code", Consolas, monospace',
+  },
+  {
+    label: "Cascadia Mono",
+    value: '"Cascadia Mono", Consolas, monospace',
+  },
+  {
+    label: "Fira Code",
+    value: '"Fira Code", Consolas, monospace',
+  },
+  {
+    label: "Source Code Pro",
+    value: '"Source Code Pro", Consolas, monospace',
+  },
+  {
+    label: "Hack",
+    value: '"Hack", Consolas, monospace',
+  },
+  {
+    label: "Consolas",
+    value: "Consolas, monospace",
+  },
+  {
+    label: "Courier New",
+    value: '"Courier New", monospace',
+  },
+  {
+    label: "Menlo",
+    value: "Menlo, Consolas, monospace",
+  },
+  {
+    label: "Monaco",
+    value: "Monaco, Consolas, monospace",
+  },
+];
+
+const CUSTOM_FONT_VALUE = "__custom__";
 
 export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
   settings,
@@ -20,6 +72,18 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
   const [defaultShell, setDefaultShell] = useState(settings.defaultShell);
   const [defaultWorkingDirectory, setDefaultWorkingDirectory] = useState(
     settings.defaultWorkingDirectory
+  );
+  const [fontFamily, setFontFamily] = useState(settings.fontFamily ?? "");
+  const [fontSelectValue, setFontSelectValue] = useState(() => {
+    const saved = settings.fontFamily ?? "";
+    if (FONT_PRESETS.some((p) => p.value === saved)) return saved;
+    return CUSTOM_FONT_VALUE;
+  });
+  const [fontSize, setFontSize] = useState(
+    settings.fontSize != null ? String(settings.fontSize) : ""
+  );
+  const [lineHeight, setLineHeight] = useState(
+    settings.lineHeight != null ? String(settings.lineHeight) : ""
   );
   const selectRef = useRef<HTMLSelectElement>(null);
 
@@ -54,11 +118,22 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
 
   const handleSave = () => {
     const selectedShell = shells.find((s) => s.type === defaultShell);
+    const parsedFontSize = parseFloat(fontSize);
+    const parsedLineHeight = parseFloat(lineHeight);
     onSave({
       ...settings,
       defaultShell,
       defaultShellPath: selectedShell?.path ?? "",
       defaultWorkingDirectory,
+      fontFamily: fontFamily.trim() || undefined,
+      fontSize:
+        Number.isFinite(parsedFontSize) && parsedFontSize > 0
+          ? parsedFontSize
+          : undefined,
+      lineHeight:
+        Number.isFinite(parsedLineHeight) && parsedLineHeight > 0
+          ? parsedLineHeight
+          : undefined,
     });
   };
 
@@ -97,8 +172,66 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
           value={defaultWorkingDirectory}
           onChange={(e) => setDefaultWorkingDirectory(e.target.value)}
           placeholder="留空使用用户主目录"
-          style={{ ...inputStyle, marginBottom: 20 }}
+          style={inputStyle}
         />
+
+        <label style={labelStyle}>字体</label>
+        <select
+          value={fontSelectValue}
+          onChange={(e) => {
+            const v = e.target.value;
+            setFontSelectValue(v);
+            if (v !== CUSTOM_FONT_VALUE) setFontFamily(v);
+          }}
+          style={selectStyle}
+        >
+          {FONT_PRESETS.map((p) => (
+            <option key={p.label} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+          <option value={CUSTOM_FONT_VALUE}>自定义…</option>
+        </select>
+        {fontSelectValue === CUSTOM_FONT_VALUE && (
+          <input
+            type="text"
+            value={fontFamily}
+            onChange={(e) => setFontFamily(e.target.value)}
+            placeholder={`例如: ${DEFAULT_FONT_FAMILY.split(",")[0]}`}
+            style={inputStyle}
+          />
+        )}
+
+        <div style={rowStyle}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>字号</label>
+            <input
+              type="number"
+              min={6}
+              max={72}
+              step={1}
+              value={fontSize}
+              onChange={(e) => setFontSize(e.target.value)}
+              placeholder={String(DEFAULT_FONT_SIZE)}
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>行高</label>
+            <input
+              type="number"
+              min={0.8}
+              max={3}
+              step={0.1}
+              value={lineHeight}
+              onChange={(e) => setLineHeight(e.target.value)}
+              placeholder={String(DEFAULT_LINE_HEIGHT)}
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        <div style={hintStyle}>字体设置仅对新建终端生效</div>
 
         {version && (
           <div style={versionInfoStyle}>sTerminal v{version}</div>
@@ -165,6 +298,17 @@ const selectStyle: React.CSSProperties = {
   borderRadius: 4,
   fontSize: 13,
   outline: "none",
+};
+
+const rowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 12,
+};
+
+const hintStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "#777",
+  marginBottom: 12,
 };
 
 const versionInfoStyle: React.CSSProperties = {
