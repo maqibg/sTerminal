@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useLayoutStore } from "../store/layoutStore";
 import type { TerminalLeaf } from "../types/layout";
 import {
@@ -6,6 +7,9 @@ import {
   endDrag,
   getDragPayload,
 } from "../utils/tabDragState";
+import { getTerminal } from "../terminal/terminalInstances";
+import { terminalGetCwd } from "../ipc/terminalApi";
+import { TabContextMenu } from "./TabContextMenu";
 
 const DRAG_MIME = "application/sterminal-tab";
 
@@ -25,6 +29,11 @@ export function PaneTabBar({ leaf }: PaneTabBarProps) {
 
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    tabId: string;
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
 
@@ -67,6 +76,45 @@ export function PaneTabBar({ leaf }: PaneTabBarProps) {
       closeTab(leaf.id, tabId);
     }
   };
+
+  const handleTabContextMenu = (e: React.MouseEvent, tabId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActiveTab(leaf.id, tabId);
+    setContextMenu({ x: e.clientX, y: e.clientY, tabId });
+  };
+
+  /** 获取目标 tab 的运行时 CWD */
+  const getTabCwd = useCallback(async (tabId: string): Promise<string | undefined> => {
+    const tab = leaf.tabs.find((t) => t.id === tabId);
+    if (!tab) return undefined;
+    let cwd = tab.workingDirectory;
+    const managed = getTerminal(tab.id);
+    if (managed?.terminalId) {
+      try {
+        cwd = await terminalGetCwd(managed.terminalId);
+      } catch {
+        // 回退到初始目录
+      }
+    }
+    return cwd;
+  }, [leaf.tabs]);
+
+  const handleDuplicateTab = useCallback(async (tabId: string) => {
+    const tab = leaf.tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    const cwd = await getTabCwd(tabId);
+    addTab(leaf.id, {
+      shellType: tab.shellType,
+      shellPath: tab.shellPath,
+      workingDirectory: cwd,
+    });
+  }, [leaf.id, leaf.tabs, addTab, getTabCwd]);
+
+  const handleOpenInNewWindow = useCallback(async (tabId: string) => {
+    const cwd = await getTabCwd(tabId);
+    invoke("spawn_new_window", { cwd }).catch(console.error);
+  }, [getTabCwd]);
 
   // ── Drag source ──
 
@@ -148,7 +196,7 @@ export function PaneTabBar({ leaf }: PaneTabBarProps) {
   };
 
   return (
-    <div className="tabbar">
+    <div className="tabbar" onContextMenu={(e) => e.preventDefault()}>
       <div
         ref={tabsContainerRef}
         className="tabbar__tabs"
@@ -174,6 +222,7 @@ export function PaneTabBar({ leaf }: PaneTabBarProps) {
                 handleDoubleClick(tab.id, tab.name ?? "控制台")
               }
               onMouseDown={(e) => handleMouseDown(e, tab.id)}
+              onContextMenu={(e) => handleTabContextMenu(e, tab.id)}
             >
               {isEditing ? (
                 <input
@@ -218,6 +267,15 @@ export function PaneTabBar({ leaf }: PaneTabBarProps) {
       >
         +
       </button>
+      {contextMenu && (
+        <TabContextMenu
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onDuplicate={() => handleDuplicateTab(contextMenu.tabId)}
+          onClose={() => closeTab(leaf.id, contextMenu.tabId)}
+          onOpenInNewWindow={() => handleOpenInNewWindow(contextMenu.tabId)}
+          onDismiss={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }
