@@ -13,6 +13,7 @@ use commands::layout::{
     layout_save, layout_list, layout_load, layout_update, layout_delete, layout_rename,
     settings_get, settings_save,
 };
+use commands::window::{show_system_menu, spawn_new_window};
 use pty::manager::PtyManager;
 
 /// CLI 启动目录，consume-once：首次读取后清空
@@ -90,6 +91,9 @@ pub fn run() {
             // 设置命令
             settings_get,
             settings_save,
+            // 窗口命令
+            show_system_menu,
+            spawn_new_window,
         ])
         // 设置窗口图标 + 平台适配
         .setup(|app| {

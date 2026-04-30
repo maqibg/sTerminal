@@ -3,3 +3,6 @@ pub mod terminal;
 
 /// 布局持久化命令：save / list / load / delete / rename / settings
 pub mod layout;
+
+/// 窗口命令：show_system_menu
+pub mod window;
