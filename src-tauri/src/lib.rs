@@ -14,6 +14,7 @@ use commands::layout::{
     settings_get, settings_save,
 };
 use commands::window::{show_system_menu, spawn_new_window};
+use commands::fonts::list_monospace_fonts;
 use pty::manager::PtyManager;
 
 /// CLI 启动目录，consume-once：首次读取后清空
@@ -94,6 +95,8 @@ pub fn run() {
             // 窗口命令
             show_system_menu,
             spawn_new_window,
+            // 字体命令
+            list_monospace_fonts,
         ])
         // 设置窗口图标 + 平台适配
         .setup(|app| {

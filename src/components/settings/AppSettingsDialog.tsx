@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings } from "../../types/layout";
 import type { ShellInfo } from "../../types/terminal";
 import { shellListAvailable } from "../../ipc/terminalApi";
@@ -15,52 +16,15 @@ interface AppSettingsDialogProps {
   onCancel: () => void;
 }
 
-/** 预设等宽字体，label 仅作展示，value 为实际 font-family 字符串 */
-const FONT_PRESETS: { label: string; value: string }[] = [
-  { label: "默认 (JetBrains Mono Nerd Font)", value: "" },
-  {
-    label: "JetBrains Mono",
-    value: '"JetBrains Mono", Consolas, monospace',
-  },
-  {
-    label: "Cascadia Code",
-    value: '"Cascadia Code", Consolas, monospace',
-  },
-  {
-    label: "Cascadia Mono",
-    value: '"Cascadia Mono", Consolas, monospace',
-  },
-  {
-    label: "Fira Code",
-    value: '"Fira Code", Consolas, monospace',
-  },
-  {
-    label: "Source Code Pro",
-    value: '"Source Code Pro", Consolas, monospace',
-  },
-  {
-    label: "Hack",
-    value: '"Hack", Consolas, monospace',
-  },
-  {
-    label: "Consolas",
-    value: "Consolas, monospace",
-  },
-  {
-    label: "Courier New",
-    value: '"Courier New", monospace',
-  },
-  {
-    label: "Menlo",
-    value: "Menlo, Consolas, monospace",
-  },
-  {
-    label: "Monaco",
-    value: "Monaco, Consolas, monospace",
-  },
-];
+/** 仅保留"默认"选项作为顶部固定项，其余字体从系统枚举获取 */
+const DEFAULT_FONT_OPTION = { label: "默认 (JetBrains Mono Nerd Font)", value: "" };
 
 const CUSTOM_FONT_VALUE = "__custom__";
+
+/** 把字体族名转为 CSS font-family 值（含引号，附加 monospace 回退） */
+function familyToFontFamilyValue(family: string): string {
+  return `"${family.replace(/"/g, '\\"')}", Consolas, monospace`;
+}
 
 export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
   settings,
@@ -74,9 +38,24 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
     settings.defaultWorkingDirectory
   );
   const [fontFamily, setFontFamily] = useState(settings.fontFamily ?? "");
+  const [systemFonts, setSystemFonts] = useState<string[]>([]);
+  const [fontsLoading, setFontsLoading] = useState(true);
+
+  // 动态构建字体选项：默认项 + 系统等宽字体（字母序）
+  const fontOptions = useMemo(
+    () => [
+      DEFAULT_FONT_OPTION,
+      ...systemFonts.map((f) => ({
+        label: f,
+        value: familyToFontFamilyValue(f),
+      })),
+    ],
+    [systemFonts]
+  );
+
   const [fontSelectValue, setFontSelectValue] = useState(() => {
     const saved = settings.fontFamily ?? "";
-    if (FONT_PRESETS.some((p) => p.value === saved)) return saved;
+    if (saved === "") return "";
     return CUSTOM_FONT_VALUE;
   });
   const [fontSize, setFontSize] = useState(
@@ -90,6 +69,42 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
   useEffect(() => {
     getVersion().then(setVersion).catch(() => {});
   }, []);
+
+  // 加载系统已安装的等宽字体
+  useEffect(() => {
+    let cancelled = false;
+    invoke<string[]>("list_monospace_fonts")
+      .then((list) => {
+        if (cancelled) return;
+        setSystemFonts(list);
+      })
+      .catch((err) => {
+        console.error("[AppSettings] list_monospace_fonts failed:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setFontsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 字体列表就绪后，若已保存的 fontFamily 能匹配系统字体族，自动切到对应选项
+  useEffect(() => {
+    if (systemFonts.length === 0) return;
+    const saved = settings.fontFamily ?? "";
+    if (saved === "") {
+      setFontSelectValue("");
+      return;
+    }
+    const matched = systemFonts.find(
+      (f) => familyToFontFamilyValue(f) === saved
+    );
+    if (matched) {
+      setFontSelectValue(familyToFontFamilyValue(matched));
+    }
+    // 未匹配则保持 CUSTOM_FONT_VALUE 由用户手工编辑
+  }, [systemFonts, settings.fontFamily]);
 
   useEffect(() => {
     shellListAvailable()
@@ -175,7 +190,12 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
           style={inputStyle}
         />
 
-        <label style={labelStyle}>字体</label>
+        <label style={labelStyle}>
+          字体
+          {fontsLoading && (
+            <span style={loadingHintStyle}> （加载系统字体中…）</span>
+          )}
+        </label>
         <select
           value={fontSelectValue}
           onChange={(e) => {
@@ -184,8 +204,9 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
             if (v !== CUSTOM_FONT_VALUE) setFontFamily(v);
           }}
           style={selectStyle}
+          disabled={fontsLoading}
         >
-          {FONT_PRESETS.map((p) => (
+          {fontOptions.map((p) => (
             <option key={p.label} value={p.value}>
               {p.label}
             </option>
@@ -309,6 +330,12 @@ const hintStyle: React.CSSProperties = {
   fontSize: 11,
   color: "#777",
   marginBottom: 12,
+};
+
+const loadingHintStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "#666",
+  marginLeft: 4,
 };
 
 const versionInfoStyle: React.CSSProperties = {

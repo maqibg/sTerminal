@@ -6,3 +6,6 @@ pub mod layout;
 
 /// 窗口命令：show_system_menu
 pub mod window;
+
+/// 字体命令：list_monospace_fonts
+pub mod fonts;
