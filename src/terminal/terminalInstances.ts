@@ -252,17 +252,29 @@ export function acquireTerminal(
   });
 
   // WebGL addon（降级安全）
+  // 延后到下一帧再加载：term.open() 之后容器尺寸/DPI 可能还未稳定，
+  // 立即加载会导致首屏字形从尚未就绪的纹理图集采样，出现碎片化乱码，
+  // 必须等 resize 才能恢复
   let webglAddon: WebglAddon | undefined;
-  try {
-    webglAddon = new WebglAddon();
-    webglAddon.onContextLoss(() => {
-      webglAddon?.dispose();
-      webglAddon = undefined;
-    });
-    term.loadAddon(webglAddon);
-  } catch {
-    // Canvas fallback
-  }
+  requestAnimationFrame(() => {
+    try {
+      webglAddon = new WebglAddon();
+      webglAddon.onContextLoss(() => {
+        webglAddon?.dispose();
+        webglAddon = undefined;
+      });
+      term.loadAddon(webglAddon);
+      // 加载完立即清纹理图集 + 全量重绘，避免初始化窗口下首屏渲染错乱
+      try {
+        term.clearTextureAtlas();
+        term.refresh(0, term.rows - 1);
+      } catch {
+        // ignore
+      }
+    } catch {
+      // Canvas fallback
+    }
+  });
 
   const managed: ManagedTerminal = {
     sessionId,
