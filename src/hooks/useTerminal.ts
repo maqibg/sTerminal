@@ -7,7 +7,6 @@ import {
   getTerminal,
   subscribeTerminal,
 } from "../terminal/terminalInstances";
-import { terminalWrite } from "../ipc/terminalApi";
 
 interface UseTerminalOptions {
   panelId: string;
@@ -101,12 +100,8 @@ export function useTerminal({
     try {
       const text = await navigator.clipboard.readText();
       if (!text) return;
-      const id = getTerminal(panelId)?.terminalId;
-      if (id) {
-        terminalWrite(id, new TextEncoder().encode(text)).catch(
-          console.error
-        );
-      }
+      const term = getTerminal(panelId)?.terminal;
+      if (term) term.paste(text);
     } catch (err) {
       console.error("[useTerminal] Paste failed:", err);
     }

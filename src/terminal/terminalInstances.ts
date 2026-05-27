@@ -202,12 +202,7 @@ export function acquireTerminal(
     navigator.clipboard
       .readText()
       .then((text) => {
-        if (text && managed.terminalId) {
-          terminalWrite(
-            managed.terminalId,
-            new TextEncoder().encode(text)
-          ).catch(console.error);
-        }
+        if (text) term.paste(text);
       })
       .catch(console.error);
   };
