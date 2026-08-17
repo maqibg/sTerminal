@@ -9,3 +9,6 @@ pub mod window;
 
 /// 字体命令：list_monospace_fonts
 pub mod fonts;
+
+/// 下载命令：download_update / open_file
+pub mod download;

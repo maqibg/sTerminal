@@ -9,17 +9,16 @@ import { LayoutManagerDrawer } from "./components/layout-manager/LayoutManagerDr
 import { AppSettingsDialog } from "./components/settings/AppSettingsDialog";
 import { CommandManagerDrawer } from "./components/commands/CommandManagerDrawer";
 import { KeyboardShortcutsDialog } from "./components/KeyboardShortcutsDialog";
-import { ConfirmDialog } from "./components/ConfirmDialog";
+import { UpdateDownloadDialog } from "./components/UpdateDownloadDialog";
 import { Toast } from "./components/Toast";
 import { useLayoutStore } from "./store/layoutStore";
 import { useSettingsStore } from "./store/settingsStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { layoutUpdate } from "./ipc/layoutApi";
-import { collectLeaves, findLeafById } from "./utils/layoutTree";
+import { collectLeaves, findLeafById, rekeyLayoutTree } from "./utils/layoutTree";
 import { refitAll, getTerminal } from "./terminal/terminalInstances";
 import { terminalGetCwd } from "./ipc/terminalApi";
 import { checkForUpdate, type UpdateInfo } from "./utils/updateChecker";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type { LayoutNode, AppSettings } from "./types/layout";
 
 interface ToastState {
@@ -124,7 +123,9 @@ export function App() {
   };
 
   const handleLayoutLoad = (tree: LayoutNode, layoutId: string, layoutName: string) => {
-    setLayoutTree(tree);
+    // 重新生成整棵树的 leaf.id / session.id，避免与 terminalInstances 缓存中
+    // 残留的脏实例撞 key，导致加载后终端无法输入 / Ctrl+C 无反应
+    setLayoutTree(rekeyLayoutTree(tree));
     setActiveLayout(layoutId, layoutName);
     addToast("布局已加载", "success");
   };
@@ -272,16 +273,9 @@ export function App() {
 
       {/* 更新弹窗 */}
       {showUpdateDialog && updateInfo && (
-        <ConfirmDialog
-          title="发现新版本"
-          message={`当前版本：v${updateInfo.currentVersion}\n最新版本：v${updateInfo.latestVersion}\n\n是否前往下载页面？`}
-          kind="info"
-          confirmText="前往下载"
-          onConfirm={() => {
-            setShowUpdateDialog(false);
-            openUrl(updateInfo.releaseUrl);
-          }}
-          onCancel={() => setShowUpdateDialog(false)}
+        <UpdateDownloadDialog
+          updateInfo={updateInfo}
+          onClose={() => setShowUpdateDialog(false)}
         />
       )}
 

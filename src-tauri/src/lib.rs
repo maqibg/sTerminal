@@ -15,6 +15,7 @@ use commands::layout::{
 };
 use commands::window::{show_system_menu, spawn_new_window};
 use commands::fonts::list_monospace_fonts;
+use commands::download::{download_update, open_file};
 use pty::manager::PtyManager;
 
 /// CLI 启动目录，consume-once：首次读取后清空
@@ -97,6 +98,9 @@ pub fn run() {
             spawn_new_window,
             // 字体命令
             list_monospace_fonts,
+            // 下载命令
+            download_update,
+            open_file,
         ])
         // 设置窗口图标 + 平台适配
         .setup(|app| {

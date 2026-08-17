@@ -174,6 +174,42 @@ export function duplicateNode(
 }
 
 /**
+ * 深拷贝布局树并为所有节点重新生成 ID。
+ *
+ * 用于「加载已保存布局」场景：保存的树里 leaf.id / session.id 是固化的旧 UUID，
+ * 若直接塞进 store，这些 ID 会与 terminalInstances 缓存（以 session.id 为 key）中
+ * 残留的脏实例（terminalId 已失效 / PTY 已 kill）撞 key，
+ * 导致 acquireTerminal 返回旧壳、onData 因 terminalId 为空丢弃所有输入，
+ * 表现为「加载布局后终端无法输入 / Ctrl+C 无反应」。
+ *
+ * 重新生成 ID 后，每次加载都是全新 key，必然新建 xterm + PTY 实例，从根上规避冲突。
+ */
+export function rekeyLayoutTree(tree: LayoutNode): LayoutNode {
+  if (tree.type === "terminal") {
+    // 旧 tabId → 新 tabId 映射，用于同步 activeTabId
+    const idMap = new Map<string, string>();
+    const newTabs = tree.tabs.map((session) => {
+      const newId = generateId();
+      idMap.set(session.id, newId);
+      return { ...session, id: newId };
+    });
+    const newActiveTabId =
+      idMap.get(tree.activeTabId) ?? newTabs[0]?.id ?? tree.activeTabId;
+    return {
+      ...tree,
+      id: generateId(),
+      tabs: newTabs,
+      activeTabId: newActiveTabId,
+    };
+  }
+  return {
+    ...tree,
+    first: rekeyLayoutTree(tree.first),
+    second: rekeyLayoutTree(tree.second),
+  };
+}
+
+/**
  * 创建一个新的终端会话
  * 未显式指定 shell 时，从全局设置读取默认值
  */
