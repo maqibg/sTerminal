@@ -90,6 +90,82 @@ pub async fn show_system_menu(
 }
 
 /// 启动新的应用进程（独立窗口）
+///
+/// Windows 关键背景：
+/// - 新窗口进程内的每个终端由 ConPTY 创建伪控制台，其 Ctrl+C(CTRL_C_EVENT)
+///   信号投递依赖进程拥有一个真实的控制台环境。
+/// - DETACHED_PROCESS / 不带控制台标志 都会导致新进程缺少可用控制台，
+///   ConPTY 无法投递中断信号 → 「派生窗口里 Ctrl+C 无反应」。
+/// - CREATE_NEW_CONSOLE 能修复信号，但默认会弹出可见的黑色控制台窗口。
+/// 因此 Windows 下用 CreateProcessW 手动构造进程，通过 STARTUPINFO 的
+/// STARTF_USESHOWWINDOW + SW_HIDE 让新控制台创建即隐藏——既保留可投递信号的
+/// 真实控制台，又不弹黑窗。
+#[cfg(windows)]
+#[tauri::command]
+pub async fn spawn_new_window(cwd: Option<String>) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PWSTR;
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        CreateProcessW, CREATE_NEW_CONSOLE, CREATE_NEW_PROCESS_GROUP, CREATE_UNICODE_ENVIRONMENT,
+        PROCESS_INFORMATION, STARTF_USESHOWWINDOW, STARTUPINFOW,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
+
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+
+    // 构造命令行：exe 路径需加引号（可能含空格），再追加 --dir 参数
+    let mut cmdline = format!("\"{}\"", exe.to_string_lossy());
+    if let Some(dir) = cwd.as_ref().filter(|s| !s.is_empty()) {
+        cmdline.push_str(" --dir \"");
+        cmdline.push_str(dir);
+        cmdline.push('"');
+    }
+
+    // 转成以 NUL 结尾的 UTF-16（CreateProcessW 会就地修改此缓冲区，故必须可变）
+    let mut cmdline_w: Vec<u16> = std::ffi::OsStr::new(&cmdline)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let mut si = STARTUPINFOW::default();
+    si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+    // 启用 wShowWindow，并设为 SW_HIDE，令 CREATE_NEW_CONSOLE 建立的控制台不可见
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE.0 as u16;
+
+    let mut pi = PROCESS_INFORMATION::default();
+
+    let flags = CREATE_NEW_CONSOLE | CREATE_NEW_PROCESS_GROUP | CREATE_UNICODE_ENVIRONMENT;
+
+    let result = unsafe {
+        CreateProcessW(
+            None,                                  // lpApplicationName（用命令行首段）
+            Some(PWSTR(cmdline_w.as_mut_ptr())),   // lpCommandLine（可变缓冲）
+            None,                                  // lpProcessAttributes
+            None,                                  // lpThreadAttributes
+            false,                                 // bInheritHandles：不继承句柄，避免污染新控制台
+            flags,
+            None,                                  // lpEnvironment：继承父进程环境
+            None,                                  // lpCurrentDirectory
+            &si,
+            &mut pi,
+        )
+    };
+
+    result.map_err(|e| format!("CreateProcessW failed: {}", e))?;
+
+    // 立即关闭进程/线程句柄，新进程独立运行、不随本进程退出
+    unsafe {
+        let _ = CloseHandle(pi.hProcess);
+        let _ = CloseHandle(pi.hThread);
+    }
+
+    Ok(())
+}
+
+/// 启动新的应用进程（独立窗口）——非 Windows 平台
+#[cfg(not(windows))]
 #[tauri::command]
 pub async fn spawn_new_window(cwd: Option<String>) -> Result<(), String> {
     use std::process::Command;
@@ -99,14 +175,6 @@ pub async fn spawn_new_window(cwd: Option<String>) -> Result<(), String> {
 
     if let Some(dir) = cwd.as_ref().filter(|s| !s.is_empty()) {
         cmd.arg("--dir").arg(dir);
-    }
-
-    // Windows：以独立进程组启动，避免随主进程退出
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // CREATE_NEW_PROCESS_GROUP(0x00000200) | DETACHED_PROCESS(0x00000008)
-        cmd.creation_flags(0x00000200 | 0x00000008);
     }
 
     cmd.spawn().map_err(|e| e.to_string())?;
