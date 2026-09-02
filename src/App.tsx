@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./styles/global.css";
 import "./styles/terminal.css";
 import "./styles/tabbar.css";
@@ -79,6 +80,14 @@ export function App() {
 
   // WebGL 纹理图集失效监听（窗口焦点/可见性/DPI 变化等尺寸不变的场景）
   useEffect(() => installAtlasInvalidationListeners(), []);
+
+  // 同步窗口标题：任务栏缩略图 / Alt+Tab 中显示当前布局名
+  useEffect(() => {
+    const title = activeLayoutName
+      ? `${activeLayoutName}${layoutDirty ? " *" : ""} - sTerminal`
+      : "sTerminal";
+    getCurrentWindow().setTitle(title);
+  }, [activeLayoutName, layoutDirty]);
 
   // 启动后延迟 3s 自动检查更新（静默：有更新弹窗，无更新/失败不提示）
   const autoCheckDone = useRef(false);
