@@ -145,6 +145,14 @@ export interface AppSettings {
   fontSize?: number;
   /** 终端行高倍数，未设置表示使用内置默认值 1.2 */
   lineHeight?: number;
+  /**
+   * 是否启用 GPU 加速渲染（xterm WebGL 渲染器）。
+   * undefined / true 表示启用（默认）；false 表示回退到 DOM 渲染器。
+   *
+   * 关闭后渲染性能下降，但完全不涉及 WebGL 纹理图集，可彻底规避
+   * 图集失效导致的字形错乱——作为个别机器上的兜底手段。
+   */
+  gpuAcceleration?: boolean;
   /** 常用命令分组列表 */
   commandGroups: CommandGroup[];
 }

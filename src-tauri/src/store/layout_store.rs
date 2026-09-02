@@ -96,6 +96,13 @@ pub struct AppSettings {
     /// 终端行高倍数
     #[serde(rename = "lineHeight", default, skip_serializing_if = "Option::is_none")]
     pub line_height: Option<f32>,
+    /// 是否启用 GPU 加速渲染（WebGL）。None 视为启用
+    #[serde(
+        rename = "gpuAcceleration",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub gpu_acceleration: Option<bool>,
     /// 常用命令分组列表
     #[serde(rename = "commandGroups", default)]
     pub command_groups: Vec<CommandGroup>,
@@ -110,6 +117,7 @@ impl Default for AppSettings {
             font_family: None,
             font_size: None,
             line_height: None,
+            gpu_acceleration: None,
             command_groups: Vec::new(),
         }
     }

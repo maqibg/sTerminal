@@ -64,6 +64,10 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
   const [lineHeight, setLineHeight] = useState(
     settings.lineHeight != null ? String(settings.lineHeight) : ""
   );
+  // 未设置视为开启（默认走 WebGL）
+  const [gpuAcceleration, setGpuAcceleration] = useState(
+    settings.gpuAcceleration !== false
+  );
   const selectRef = useRef<HTMLSelectElement>(null);
 
   useEffect(() => {
@@ -149,6 +153,7 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
         Number.isFinite(parsedLineHeight) && parsedLineHeight > 0
           ? parsedLineHeight
           : undefined,
+      gpuAcceleration,
     });
   };
 
@@ -254,6 +259,20 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
 
         <div style={hintStyle}>字体设置仅对新建终端生效</div>
 
+        <label style={checkboxRowStyle}>
+          <input
+            type="checkbox"
+            checked={gpuAcceleration}
+            onChange={(e) => setGpuAcceleration(e.target.checked)}
+          />
+          <span>GPU 加速渲染</span>
+        </label>
+        <div style={hintStyle}>
+          关闭后改用 DOM 渲染，兼容性最好但滚动性能下降。
+          若终端偶发字形错乱且 Ctrl+Shift+R 重绘无法长期改善，可尝试关闭。
+          仅对新建终端生效。
+        </div>
+
         {version && (
           <div style={versionInfoStyle}>sTerminal v{version}</div>
         )}
@@ -330,6 +349,17 @@ const hintStyle: React.CSSProperties = {
   fontSize: 11,
   color: "#777",
   marginBottom: 12,
+};
+
+const checkboxRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  fontSize: 12,
+  color: "#e0e0e0",
+  marginBottom: 6,
+  cursor: "pointer",
+  userSelect: "none",
 };
 
 const loadingHintStyle: React.CSSProperties = {
