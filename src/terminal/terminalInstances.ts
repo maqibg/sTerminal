@@ -12,6 +12,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
 import {
@@ -62,15 +63,203 @@ function notifyListeners(sessionId: string) {
   stateListeners.get(sessionId)?.forEach((fn) => fn());
 }
 
+// ── WebGL 纹理图集重建 ──
+
+/** terminal → 待执行的补重绘 rAF 句柄 */
+const refreshRafs = new WeakMap<Terminal, number>();
+
+/**
+ * 重建单个终端的 WebGL 纹理图集。
+ *
+ * 时序很讲究，两步都不能省、也不能换顺序：
+ *
+ * 1) clearTextureAtlas 必须【同步】执行。图集里的字形是按旧 cell 尺寸/DPR
+ *    光栅化的，而渲染器在本帧内就会用新参数绘制；晚一帧清空就会有一帧拿
+ *    旧字形填新 cell，表现为字形被挤压/重叠成一团乱码。
+ *
+ * 2) refresh 必须【延后一帧】补上。清空图集后渲染器只重绘"脏行"，未变脏
+ *    的行会从空图集采样导致文本整片消失（emoji 走独立纹理路径所以会残留
+ *    下来）。等几何/DPI 在渲染层落定后再全量重绘才有效。
+ */
+export function rebuildAtlas(term: Terminal) {
+  try {
+    term.clearTextureAtlas();
+  } catch {
+    // ignore
+  }
+
+  const pending = refreshRafs.get(term);
+  if (pending !== undefined) cancelAnimationFrame(pending);
+
+  const raf = requestAnimationFrame(() => {
+    refreshRafs.delete(term);
+    try {
+      term.refresh(0, term.rows - 1);
+    } catch {
+      // 终端可能已 dispose
+    }
+  });
+  refreshRafs.set(term, raf);
+}
+
+/** 取消某个终端挂起的补重绘（销毁前调用） */
+function cancelPendingRefresh(term: Terminal) {
+  const pending = refreshRafs.get(term);
+  if (pending !== undefined) {
+    cancelAnimationFrame(pending);
+    refreshRafs.delete(term);
+  }
+}
+
+/**
+ * 重建所有活跃终端的纹理图集。
+ *
+ * 用于"尺寸没变但渲染上下文已失效"的场景——这类情况不会触发 onResize，
+ * 因此必须由外部事件显式驱动，否则画面会一直坏着直到用户手动改尺寸。
+ * 触发源见 installAtlasInvalidationListeners()。
+ */
+export function rebuildAllAtlases() {
+  for (const managed of cache.values()) {
+    rebuildAtlas(managed.terminal);
+  }
+}
+
+/** 图集失效监听是否已安装（防重复安装） */
+let invalidationListenersInstalled = false;
+
+/**
+ * 安装纹理图集失效监听（全局一次，在 App 挂载时调用）。
+ *
+ * 要解决的问题：WebGL 纹理图集会在【尺寸不变】的情况下失效，这类场景
+ * 永远等不到 onResize，画面会一直坏着直到用户手动拖动窗口改尺寸。
+ * 已知触发源：
+ *
+ * - WebView2 在窗口失焦/被遮挡/最小化时会主动释放不可见表面的显存。
+ *   恢复可见时 WebGL 上下文仍然活着（不触发 onContextLoss），但纹理内容
+ *   已是垃圾。这是"点一下窗口内容就乱码"最常见的成因。
+ * - DPI 变化（跨显示器拖动、系统缩放调整）：图集按旧 devicePixelRatio
+ *   光栅化，但 CSS 尺寸不变，因此不会触发 onResize。
+ * - 字体加载完成：新字体替换 fallback 字形后旧图集失效。
+ *
+ * 这些事件都很低频（用户级操作），重建图集的开销可以忽略，宁可多重建
+ * 也不要漏。
+ *
+ * @returns 卸载所有监听的函数
+ */
+export function installAtlasInvalidationListeners(): () => void {
+  if (invalidationListenersInstalled) return () => {};
+  invalidationListenersInstalled = true;
+
+  const disposers: Array<() => void> = [];
+
+  // ── 页面可见性：最小化/恢复、切换虚拟桌面、锁屏解锁 ──
+  const onVisibility = () => {
+    if (document.visibilityState === "visible") rebuildAllAtlases();
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+  disposers.push(() =>
+    document.removeEventListener("visibilitychange", onVisibility)
+  );
+
+  // ── WebView 层面的焦点：点击窗口恢复焦点时 ──
+  const onWindowFocus = () => rebuildAllAtlases();
+  window.addEventListener("focus", onWindowFocus);
+  disposers.push(() => window.removeEventListener("focus", onWindowFocus));
+
+  // ── 页面从 back/forward cache 恢复（WebView2 偶发走这条路）──
+  const onPageShow = (e: PageTransitionEvent) => {
+    if (e.persisted) rebuildAllAtlases();
+  };
+  window.addEventListener("pageshow", onPageShow);
+  disposers.push(() => window.removeEventListener("pageshow", onPageShow));
+
+  // ── DPI 变化：监听 devicePixelRatio 对应的 media query ──
+  // resolution 查询在 DPR 跨过阈值时触发；每次触发后要重新绑定，
+  // 因为新的 DPR 需要一个新的查询条件。
+  let dprMql: MediaQueryList | null = null;
+  let dprDisposed = false;
+  const onDprChange = () => {
+    rebuildAllAtlases();
+    bindDprListener();
+  };
+  const bindDprListener = () => {
+    if (dprDisposed) return;
+    if (dprMql) dprMql.removeEventListener("change", onDprChange);
+    try {
+      dprMql = window.matchMedia(
+        `(resolution: ${window.devicePixelRatio}dppx)`
+      );
+      dprMql.addEventListener("change", onDprChange);
+    } catch {
+      dprMql = null;
+    }
+  };
+  bindDprListener();
+  disposers.push(() => {
+    dprDisposed = true;
+    dprMql?.removeEventListener("change", onDprChange);
+    dprMql = null;
+  });
+
+  // ── 字体加载完成：新字形替换 fallback 后旧图集失效 ──
+  if (document.fonts) {
+    const onFontsDone = () => rebuildAllAtlases();
+    document.fonts.addEventListener("loadingdone", onFontsDone);
+    disposers.push(() =>
+      document.fonts.removeEventListener("loadingdone", onFontsDone)
+    );
+  }
+
+  // ── Tauri 窗口事件：比 WebView 的 focus 更可靠，且能拿到缩放变化 ──
+  // 异步注册，用标志位保证 dispose 早于注册完成时也能正确清理。
+  let tauriDisposed = false;
+  const tauriUnlisteners: Array<() => void> = [];
+  const registerTauri = async () => {
+    try {
+      const win = getCurrentWindow();
+
+      const unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
+        if (focused) rebuildAllAtlases();
+      });
+      const unlistenScale = await win.onScaleChanged(() => {
+        rebuildAllAtlases();
+      });
+
+      if (tauriDisposed) {
+        unlistenFocus();
+        unlistenScale();
+        return;
+      }
+      tauriUnlisteners.push(unlistenFocus, unlistenScale);
+    } catch (err) {
+      // 非 Tauri 环境（浏览器里跑 vite dev）忽略，上面的 DOM 监听已够用
+      console.warn("[terminal] Tauri window listeners unavailable:", err);
+    }
+  };
+  registerTauri();
+  disposers.push(() => {
+    tauriDisposed = true;
+    tauriUnlisteners.forEach((fn) => fn());
+    tauriUnlisteners.length = 0;
+  });
+
+  return () => {
+    disposers.forEach((fn) => fn());
+    invalidationListenersInstalled = false;
+  };
+}
+
 // ── 公共 API ──
 
 /** 重新 fit 所有活跃终端并强制刷新渲染（弹窗关闭等场景） */
 export function refitAll() {
   for (const managed of cache.values()) {
     try {
+      // 尺寸有变化时 fit() 会同步触发 onResize，图集重建与补重绘都在
+      // 那里统一处理（见 rebuildAtlas 的时序说明），此处不要重复清图集。
       managed.fitAddon.fit();
-      // 清纹理图集 + 强制刷新，修复 WebGL 渲染偏移与字形错乱
-      managed.terminal.clearTextureAtlas();
+      // 尺寸没变则 onResize 不会触发，但弹窗遮挡期间的画面可能已失效，
+      // 仍需强制重绘一次（不清图集——字形尺寸没变，图集是有效的）。
       managed.terminal.refresh(0, managed.terminal.rows - 1);
     } catch {
       // ignore
@@ -134,6 +323,8 @@ export function acquireTerminal(
     (settingsLoaded && currentSettings.fontSize) || DEFAULT_FONT_SIZE;
   const lineHeight =
     (settingsLoaded && currentSettings.lineHeight) || DEFAULT_LINE_HEIGHT;
+  // 注：GPU 加速（WebGL）的开关不在这里读——首个终端可能早于设置加载完成，
+  // 必须等 settingsReady 后再决定，见下方 WebGL addon 段。
 
   // ── 创建 xterm ──
   const term = new Terminal({
@@ -224,6 +415,11 @@ export function acquireTerminal(
         doPaste();
         return false;
       }
+      // Ctrl+Shift+R → 强制重绘（应用级快捷键，不要透传给 shell）
+      // 返回 false 只阻止 xterm 写 PTY，事件仍会冒泡到 document 的全局监听
+      if (event.code === "KeyR") {
+        return false;
+      }
     }
 
     if (event.ctrlKey && !event.shiftKey && !event.altKey) {
@@ -246,30 +442,51 @@ export function acquireTerminal(
     return true;
   });
 
-  // WebGL addon（降级安全）
-  // 延后到下一帧再加载：term.open() 之后容器尺寸/DPI 可能还未稳定，
-  // 立即加载会导致首屏字形从尚未就绪的纹理图集采样，出现碎片化乱码，
-  // 必须等 resize 才能恢复
+  // 实例是否已被销毁。声明在此处（而非 PTY 段）是因为下面的 WebGL
+  // 异步加载链也要读它，避免依赖 TDZ 的时序巧合。
+  let destroyed = false;
+
+  // WebGL addon（可关闭 + 降级安全）
+  //
+  // 不加载时 xterm 用内置 DOM 渲染器：性能较低，但完全不涉及纹理图集，
+  // 可彻底规避图集失效导致的字形错乱（个别机器上的兜底手段）。
+  //
+  // 时机上有两层延后：
+  // - 等 settingsReady：首个终端可能在设置加载完成前就被创建，此时读到的
+  //   gpuAcceleration 是默认值，必须等真实配置到位再决定加不加载，否则
+  //   用户关掉 GPU 加速后第一个终端仍会是 WebGL。
+  // - 再等一帧：term.open() 之后容器尺寸/DPI 可能还未稳定，立即加载会让
+  //   首屏字形从尚未就绪的纹理图集采样，出现碎片化乱码且必须等 resize 才恢复。
   let webglAddon: WebglAddon | undefined;
-  requestAnimationFrame(() => {
-    try {
-      webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => {
-        webglAddon?.dispose();
-        webglAddon = undefined;
+  settingsReady
+    .then(() => {
+      if (destroyed) return;
+
+      const { settings: s, loaded } = useSettingsStore.getState();
+      // 仅在用户显式关闭时才走 DOM 渲染器
+      if (loaded && s.gpuAcceleration === false) return;
+
+      requestAnimationFrame(() => {
+        if (destroyed) return;
+        try {
+          webglAddon = new WebglAddon();
+          webglAddon.onContextLoss(() => {
+            webglAddon?.dispose();
+            webglAddon = undefined;
+            // 降级到 DOM 渲染器后需重建图集，否则丢失瞬间的画面会残留
+            rebuildAtlas(term);
+          });
+          term.loadAddon(webglAddon);
+          // 切换渲染器后图集要重建
+          rebuildAtlas(term);
+        } catch {
+          // WebGL 不可用 → 保持 DOM 渲染器
+        }
       });
-      term.loadAddon(webglAddon);
-      // 加载完立即清纹理图集 + 全量重绘，避免初始化窗口下首屏渲染错乱
-      try {
-        term.clearTextureAtlas();
-        term.refresh(0, term.rows - 1);
-      } catch {
-        // ignore
-      }
-    } catch {
-      // Canvas fallback
-    }
-  });
+    })
+    .catch(() => {
+      // 设置加载失败 → 保持 DOM 渲染器（保守选择）
+    });
 
   const managed: ManagedTerminal = {
     sessionId,
@@ -286,7 +503,6 @@ export function acquireTerminal(
   // ── 创建 PTY ──
   let unlistenOutput: (() => void) | undefined;
   let unlistenExit: (() => void) | undefined;
-  let destroyed = false;
 
   const init = async () => {
     try {
@@ -377,13 +593,9 @@ export function acquireTerminal(
     terminalWrite(id, new TextEncoder().encode(data)).catch(console.error);
   });
 
-  // xterm resize → PTY resize + 清纹理图集（避免 WebGL 字形缓存错乱）
+  // xterm resize → PTY resize + 重建纹理图集（避免 WebGL 字形缓存错乱）
   const resizeDisposable = term.onResize(({ cols, rows }) => {
-    try {
-      term.clearTextureAtlas();
-    } catch {
-      // ignore
-    }
+    rebuildAtlas(term);
     const id = managed.terminalId;
     if (!id) return;
     terminalResize(id, cols, rows).catch(console.error);
@@ -392,6 +604,7 @@ export function acquireTerminal(
   // 保存清理函数
   cleanupFns.set(sessionId, () => {
     destroyed = true;
+    cancelPendingRefresh(term);
     dataDisposable.dispose();
     resizeDisposable.dispose();
     if (unlistenOutput) unlistenOutput();

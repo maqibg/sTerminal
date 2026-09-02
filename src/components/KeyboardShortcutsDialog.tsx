@@ -18,6 +18,7 @@ const SHORTCUT_GROUPS = [
       { keys: "Ctrl + Shift + S", desc: "保存当前布局" },
       { keys: "Ctrl + Shift + L", desc: "打开布局管理" },
       { keys: "Ctrl + Shift + P", desc: "打开常用命令" },
+      { keys: "Ctrl + Shift + R", desc: "强制重绘终端（渲染异常时）" },
       { keys: "Ctrl + ,", desc: "打开设置" },
     ],
   },

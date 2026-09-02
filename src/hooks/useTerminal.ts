@@ -55,13 +55,19 @@ export function useTerminal({
       }
     });
 
-    // 监听容器尺寸变化
+    // 监听容器尺寸变化（rAF 合并：拖分割线时一帧内可能触发多次，
+    // 避免重复 fit 引发多余的 clearTextureAtlas 与 PTY resize IPC）
+    let fitRaf: number | null = null;
     const observer = new ResizeObserver(() => {
-      try {
-        managed.fitAddon.fit();
-      } catch {
-        // ignore
-      }
+      if (fitRaf !== null) return;
+      fitRaf = requestAnimationFrame(() => {
+        fitRaf = null;
+        try {
+          managed.fitAddon.fit();
+        } catch {
+          // ignore
+        }
+      });
     });
     observer.observe(host);
 
@@ -72,6 +78,7 @@ export function useTerminal({
 
     return () => {
       observer.disconnect();
+      if (fitRaf !== null) cancelAnimationFrame(fitRaf);
       unsub();
       // 只做分离，不销毁；若 5s 内没有重新 acquire 则自动销毁
       detachTerminal(panelId);

@@ -16,7 +16,12 @@ import { useSettingsStore } from "./store/settingsStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { layoutUpdate } from "./ipc/layoutApi";
 import { collectLeaves, findLeafById, rekeyLayoutTree } from "./utils/layoutTree";
-import { refitAll, getTerminal } from "./terminal/terminalInstances";
+import {
+  refitAll,
+  getTerminal,
+  installAtlasInvalidationListeners,
+  rebuildAllAtlases,
+} from "./terminal/terminalInstances";
 import { terminalGetCwd } from "./ipc/terminalApi";
 import { checkForUpdate, type UpdateInfo } from "./utils/updateChecker";
 import type { LayoutNode, AppSettings } from "./types/layout";
@@ -71,6 +76,9 @@ export function App() {
   const removeToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  // WebGL 纹理图集失效监听（窗口焦点/可见性/DPI 变化等尺寸不变的场景）
+  useEffect(() => installAtlasInvalidationListeners(), []);
 
   // 启动后延迟 3s 自动检查更新（静默：有更新弹窗，无更新/失败不提示）
   const autoCheckDone = useRef(false);
@@ -142,15 +150,28 @@ export function App() {
 
   const handleSettingsSave = useCallback(
     async (newSettings: AppSettings) => {
+      // 渲染器切换需要重建 xterm 实例，无法热生效
+      const rendererChanged =
+        (appSettings.gpuAcceleration !== false) !==
+        (newSettings.gpuAcceleration !== false);
       try {
         await updateSettings(newSettings);
         closeSettings();
-        addToast("设置已保存", "success");
+        if (rendererChanged) {
+          addToast(
+            newSettings.gpuAcceleration === false
+              ? "已关闭 GPU 加速，新建终端生效"
+              : "已开启 GPU 加速，新建终端生效",
+            "info"
+          );
+        } else {
+          addToast("设置已保存", "success");
+        }
       } catch (e) {
         addToast("保存设置失败：" + String(e), "error");
       }
     },
-    [updateSettings, closeSettings, addToast]
+    [updateSettings, closeSettings, addToast, appSettings.gpuAcceleration]
   );
 
   /** 获取焦点面板的运行时 CWD */
@@ -202,6 +223,7 @@ export function App() {
       const idx = focusPanelId ? leafIds.indexOf(focusPanelId) : 0;
       setFocusPanel(leafIds[(idx - 1 + leafIds.length) % leafIds.length]);
     },
+    onRedraw: rebuildAllAtlases,
   });
 
   return (

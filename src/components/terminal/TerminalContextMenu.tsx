@@ -15,6 +15,7 @@ interface TerminalContextMenuProps {
   onSplitVertical: () => void;
   onDuplicate: () => void;
   onSettings: () => void;
+  onRedraw: () => void;
   onClose: () => void;
   onDismiss: () => void;
   onConfirm?: (message: string) => Promise<boolean>;
@@ -30,6 +31,7 @@ export const TerminalContextMenu: React.FC<TerminalContextMenuProps> = ({
   onSplitVertical,
   onDuplicate,
   onSettings,
+  onRedraw,
   onClose,
   onDismiss,
   onConfirm,
@@ -128,6 +130,14 @@ export const TerminalContextMenu: React.FC<TerminalContextMenuProps> = ({
         ⎘ 复制此面板
       </button>
       <div className="terminal-context-menu__separator" />
+      <button
+        className="terminal-context-menu__item"
+        onClick={() => handleAction(onRedraw)}
+        title="渲染出现乱码时可强制重绘所有终端"
+      >
+        <span>⟳ 重绘终端</span>
+        <span className="terminal-context-menu__shortcut">Ctrl+Shift+R</span>
+      </button>
       <button
         className="terminal-context-menu__item"
         onClick={() => handleAction(onSettings)}

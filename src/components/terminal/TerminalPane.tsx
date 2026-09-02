@@ -7,7 +7,7 @@ import { TerminalSettingsDialog } from "./TerminalSettingsDialog";
 import { DropOverlay, type DropZone } from "../DropOverlay";
 import { useLayoutStore } from "../../store/layoutStore";
 import { countLeaves } from "../../utils/layoutTree";
-import { getTerminal } from "../../terminal/terminalInstances";
+import { getTerminal, rebuildAllAtlases } from "../../terminal/terminalInstances";
 import { terminalGetCwd, terminalWrite } from "../../ipc/terminalApi";
 import { getDragPayload, endDrag } from "../../utils/tabDragState";
 import { useConfirm } from "../../hooks/useConfirm";
@@ -330,6 +330,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({ leaf }) => {
           onSplitVertical={handleSplitVertical}
           onDuplicate={handleDuplicate}
           onSettings={() => setShowSettings(true)}
+          onRedraw={rebuildAllAtlases}
           onClose={() => closePanel(leaf.id)}
           onDismiss={() => setContextMenu(null)}
           onConfirm={(msg) => confirm({ message: msg, title: "关闭面板", kind: "danger" })}
