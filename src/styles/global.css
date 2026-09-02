@@ -13,6 +13,8 @@
   --split-handle: #333;
   --split-handle-hover: #555;
   --split-handle-width: 4px;
+  /* 拖拽分割线时的预览线 */
+  --split-preview: #3b82f6;
 
   /* 文字颜色 */
   --text-primary: #e0e0e0;

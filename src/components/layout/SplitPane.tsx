@@ -1,12 +1,16 @@
-import React, { useRef } from "react";
+import React, { useRef, useCallback, useMemo } from "react";
 import type { SplitNode } from "../../types/layout";
+import type { SplitPath } from "../../utils/layoutTree";
 import { SplitHandle } from "./SplitHandle";
+import { SplitPreviewLine } from "./SplitPreviewLine";
 import { useResize } from "../../hooks/useResize";
 import { useLayoutStore } from "../../store/layoutStore";
 import { LayoutRenderer } from "./LayoutRenderer";
 
 interface SplitPaneProps {
   node: SplitNode;
+  /** 本节点在布局树中的路径（根节点为空数组） */
+  path: SplitPath;
 }
 
 /**
@@ -15,24 +19,25 @@ interface SplitPaneProps {
  * - vertical：flex-column，first 在上，second 在下
  * 根据 ratio 计算两个子节点的 flex-basis 百分比。
  */
-export function SplitPane({ node }: SplitPaneProps) {
+export function SplitPane({ node, path }: SplitPaneProps) {
   const { direction, ratio, first, second } = node;
   const containerRef = useRef<HTMLDivElement>(null);
   const updateSplitRatio = useLayoutStore((s) => s.updateSplitRatio);
 
-  // 定位 split 节点用 first 子叶子的 id
-  // 若 first 是叶子直接用其 id；若是 split 则递归取最左叶子 id
-  const getFirstLeafId = (n: typeof first): string => {
-    if (n.type === "terminal") return n.id;
-    return getFirstLeafId(n.first);
-  };
-  const splitAnchorId = getFirstLeafId(first);
+  // 子节点路径：本节点路径 + 走向
+  const firstPath = useMemo<SplitPath>(() => [...path, "first"], [path]);
+  const secondPath = useMemo<SplitPath>(() => [...path, "second"], [path]);
 
-  const handleRatioChange = (newRatio: number) => {
-    updateSplitRatio(splitAnchorId, newRatio);
-  };
+  // 用路径定位本 split 节点。不能用"first 子树最左叶子 id"——嵌套 split
+  // 时父子会算出同一个 id，导致拖父分割线实际改了子分割线的 ratio。
+  const handleRatioChange = useCallback(
+    (newRatio: number) => {
+      updateSplitRatio(path, newRatio);
+    },
+    [updateSplitRatio, path]
+  );
 
-  const { handleMouseDown } = useResize(
+  const { handleMouseDown, previewRatio } = useResize(
     direction,
     ratio,
     handleRatioChange,
@@ -47,6 +52,8 @@ export function SplitPane({ node }: SplitPaneProps) {
     width: "100%",
     height: "100%",
     overflow: "hidden",
+    // 预览线绝对定位的参照
+    position: "relative",
   };
 
   const firstStyle: React.CSSProperties = {
@@ -66,12 +73,26 @@ export function SplitPane({ node }: SplitPaneProps) {
   return (
     <div ref={containerRef} style={containerStyle}>
       <div style={firstStyle}>
-        <LayoutRenderer node={first} />
+        <LayoutRenderer node={first} path={firstPath} />
       </div>
       <SplitHandle direction={direction} onMouseDown={handleMouseDown} />
       <div style={secondStyle}>
-        <LayoutRenderer node={second} />
+        <LayoutRenderer node={second} path={secondPath} />
       </div>
+      {previewRatio !== null && (
+        <>
+          {/* 拖拽期间覆盖终端 canvas，避免 xterm 抢走鼠标（起始选区等） */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 15,
+              cursor: isHorizontal ? "col-resize" : "row-resize",
+            }}
+          />
+          <SplitPreviewLine direction={direction} ratio={previewRatio} />
+        </>
+      )}
     </div>
   );
 }
