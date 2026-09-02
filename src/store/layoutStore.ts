@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { LayoutNode, TerminalLeaf, TerminalSession } from "../types/layout";
+import type { SplitPath } from "../utils/layoutTree";
 import {
   insertNode,
   removeNode,
@@ -60,8 +61,9 @@ interface LayoutActions {
 
   /**
    * 更新分割比例（拖拽分割线时调用）。
+   * @param path 目标 split 节点在树中的路径（从根出发的 first/second 序列）
    */
-  updateSplitRatio: (targetSplitFirstLeafId: string, newRatio: number) => void;
+  updateSplitRatio: (path: SplitPath, newRatio: number) => void;
 
   /**
    * 复制面板：在指定面板旁按 direction 插入一个新面板。
@@ -189,13 +191,9 @@ export const useLayoutStore = create<LayoutStore>((set, get) => {
       }
     },
 
-    updateSplitRatio(targetSplitFirstLeafId, newRatio) {
+    updateSplitRatio(path, newRatio) {
       set((state) => ({
-        layoutTree: updateRatio(
-          state.layoutTree,
-          targetSplitFirstLeafId,
-          newRatio
-        ),
+        layoutTree: updateRatio(state.layoutTree, path, newRatio),
         layoutDirty: true,
       }));
     },

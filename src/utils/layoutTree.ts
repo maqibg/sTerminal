@@ -99,39 +99,38 @@ export function removeNode(
 }
 
 /**
+ * split 节点在布局树中的路径：从根出发每一步走 first 还是 second。
+ * 空数组表示根节点自身。
+ *
+ * SplitNode 没有 id 字段（且不能加——会破坏已保存布局的向后兼容），
+ * 因此用路径作为定位键。路径天然唯一，不像"first 子树的最左叶子 id"
+ * 那样会在嵌套 split 之间发生碰撞。
+ */
+export type SplitPath = ReadonlyArray<"first" | "second">;
+
+/**
  * 更新指定分割节点的 ratio，返回新树。
  * ratio 会被 clamp 到 [0.1, 0.9]。
- * 通过 splitNodeId 定位——这里 SplitNode 本身没有 id 字段，
- * 因此约定传入其 first 叶子的 id 作为定位键（最近的直接子叶子）。
- *
- * 注意：updateRatio 在 layoutStore 中通过直接遍历树结构来更新，
- * 本函数接受 splitNodeId（即该 split 节点下 first 子节点的 id），
- * 匹配 split 节点后更新 ratio。
- *
- * 实际上为了与 store 保持一致，这里改为：传入目标 splitNode 的
- * 内容特征来定位，但由于 SplitNode 无 id，故 store 侧直接传递路径。
- * 本函数提供一个"按引用替换"版本供 store 内部使用。
+ * 通过 path 从根逐层下钻定位目标 split 节点；路径无效则原样返回。
  */
 export function updateRatio(
   tree: LayoutNode,
-  targetSplitId: string,
+  path: SplitPath,
   newRatio: number
 ): LayoutNode {
-  const clampedRatio = Math.min(0.9, Math.max(0.1, newRatio));
-
   if (tree.type === "terminal") return tree;
 
-  // 用 split 节点下 first 子节点的叶子 id 来定位
-  // 如果 first 是叶子且 id 匹配，则此 split 节点是目标
-  if (tree.first.type === "terminal" && tree.first.id === targetSplitId) {
+  if (path.length === 0) {
+    const clampedRatio = Math.min(0.9, Math.max(0.1, newRatio));
     return { ...tree, ratio: clampedRatio };
   }
 
-  return {
-    ...tree,
-    first: updateRatio(tree.first, targetSplitId, newRatio),
-    second: updateRatio(tree.second, targetSplitId, newRatio),
-  };
+  const [step, ...rest] = path;
+  const child = tree[step];
+  const newChild = updateRatio(child, rest, newRatio);
+  if (newChild === child) return tree;
+
+  return { ...tree, [step]: newChild };
 }
 
 /**
