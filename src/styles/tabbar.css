@@ -143,6 +143,31 @@
   color: var(--text-primary);
 }
 
+/* 代理状态标记：跟在标签名后，只读（开关在控制台设置面板里） */
+.tabbar__tab-proxy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-sm);
+  background: rgba(74, 222, 128, 0.14);
+  color: var(--color-success);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+  cursor: inherit;
+}
+
+/* 开了代理但全局没配地址：实际不生效，用警告色区分 */
+.tabbar__tab-proxy--unset {
+  border-color: var(--color-warning);
+  background: rgba(250, 204, 21, 0.14);
+  color: var(--color-warning);
+}
+
 /* 拖拽中的 tab */
 .tabbar__tab--dragging {
   opacity: 0.4;

@@ -26,8 +26,11 @@ impl PtyManager {
     /// 创建新 PTY 进程并注册到注册表
     ///
     /// # 返回
-    /// - `Ok(String)`: 新建终端 ID（UUID v4）
+    /// - `Ok((String, String))`: (新建终端 ID, 实际启动的 shell 可执行文件路径)
     /// - `Err(String)`: 进程创建失败原因
+    ///
+    /// shell_path 为空时会探测系统默认 shell，因此实际用的是哪个 shell
+    /// 只有这里知道——回传给调用方，避免前端凭 session 元信息猜测。
     ///
     /// DEV-B 实现：
     /// 1. 验证 working_directory 是否存在，不存在则回退到 Home 目录
@@ -39,8 +42,9 @@ impl PtyManager {
         working_directory: String,
         cols: u16,
         rows: u16,
+        extra_env: HashMap<String, String>,
         app: AppHandle,
-    ) -> Result<String, String> {
+    ) -> Result<(String, String), String> {
         let terminal_id = uuid::Uuid::new_v4().to_string();
 
         // shell_path 为空时自动检测系统默认 Shell
@@ -65,10 +69,11 @@ impl PtyManager {
 
         let process = PtyProcess::new(
             terminal_id.clone(),
-            effective_shell,
+            effective_shell.clone(),
             effective_dir,
             cols,
             rows,
+            extra_env,
             app,
         )?;
 
@@ -77,7 +82,7 @@ impl PtyManager {
             .map_err(|e| format!("PtyManager lock error: {}", e))?
             .insert(terminal_id.clone(), process);
 
-        Ok(terminal_id)
+        Ok((terminal_id, effective_shell))
     }
 
     /// 向指定终端写入数据

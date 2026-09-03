@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::Read;
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
@@ -36,12 +37,15 @@ impl PtyProcess {
     /// 2. 打开 PTY pair（master + slave）
     /// 3. 用 shell_path + working_directory 启动子进程
     /// 4. 启动后台读取线程，emit terminal:output / terminal:exit 事件
+    ///
+    /// `extra_env` 中的变量会追加到继承环境之上（如代理变量），同名时覆盖。
     pub fn new(
         terminal_id: String,
         shell_path: String,
         working_directory: String,
         cols: u16,
         rows: u16,
+        extra_env: HashMap<String, String>,
         app_handle: tauri::AppHandle,
     ) -> Result<Self, String> {
         let pty_system = native_pty_system();
@@ -65,6 +69,11 @@ impl PtyProcess {
         // macOS 从 Dock 启动时继承的是 launchd 的最小环境，不包含 TERM
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+
+        // 调用方追加的环境变量（代理等），放在最后以便覆盖上面的默认值
+        for (key, value) in &extra_env {
+            cmd.env(key, value);
+        }
 
         // Unix 下以 login shell 启动，确保加载用户配置（~/.zshrc 等）
         #[cfg(not(target_os = "windows"))]

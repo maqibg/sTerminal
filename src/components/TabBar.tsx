@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useLayoutStore } from "../store/layoutStore";
+import { useSettingsStore } from "../store/settingsStore";
 import type { TerminalLeaf } from "../types/layout";
 import {
   startDrag,
@@ -9,6 +10,7 @@ import {
 } from "../utils/tabDragState";
 import { getTerminal } from "../terminal/terminalInstances";
 import { terminalGetCwd } from "../ipc/terminalApi";
+import { hasProxyUrl, normalizeProxyUrl } from "../utils/proxyEnv";
 import { TabContextMenu } from "./TabContextMenu";
 
 const DRAG_MIME = "application/sterminal-tab";
@@ -26,6 +28,7 @@ export function PaneTabBar({ leaf }: PaneTabBarProps) {
   const setActiveTab = useLayoutStore((s) => s.setActiveTab);
   const renamePanel = useLayoutStore((s) => s.renamePanel);
   const moveTab = useLayoutStore((s) => s.moveTab);
+  const settings = useSettingsStore((s) => s.settings);
 
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -115,6 +118,15 @@ export function PaneTabBar({ leaf }: PaneTabBarProps) {
     const cwd = await getTabCwd(tabId);
     invoke("spawn_new_window", { cwd }).catch(console.error);
   }, [getTabCwd]);
+
+  // ── 代理状态展示（开关在控制台设置面板里，这里只读）──
+
+  const proxyConfigured = hasProxyUrl(settings);
+
+  /** 代理标记的悬停说明：区分"生效中"和"开了但没配地址" */
+  const proxyBadgeTitle = proxyConfigured
+    ? `代理已开启：${normalizeProxyUrl(settings.proxyUrl ?? "")}`
+    : "已开启代理，但未配置代理地址（请在设置中填写）";
 
   // ── Drag source ──
 
@@ -235,9 +247,21 @@ export function PaneTabBar({ leaf }: PaneTabBarProps) {
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <span className="tabbar__tab-name">
-                  {tab.name ?? "控制台"}
-                </span>
+                <>
+                  <span className="tabbar__tab-name">
+                    {tab.name ?? "控制台"}
+                  </span>
+                  {tab.proxyEnabled && (
+                    <span
+                      className={`tabbar__tab-proxy ${
+                        proxyConfigured ? "" : "tabbar__tab-proxy--unset"
+                      }`}
+                      title={proxyBadgeTitle}
+                    >
+                      P
+                    </span>
+                  )}
+                </>
               )}
               {!isEditing && (
                 <button

@@ -3,6 +3,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { TerminalSession } from "../../types/layout";
 import type { ShellInfo } from "../../types/terminal";
 import { shellListAvailable } from "../../ipc/terminalApi";
+import { useSettingsStore } from "../../store/settingsStore";
+import { hasProxyUrl, normalizeProxyUrl } from "../../utils/proxyEnv";
 
 interface TerminalSettingsDialogProps {
   session: TerminalSession;
@@ -20,7 +22,12 @@ export const TerminalSettingsDialog: React.FC<TerminalSettingsDialogProps> = ({
   const [workingDirectory, setWorkingDirectory] = useState(session.workingDirectory);
   const [startupCommand, setStartupCommand] = useState(session.startupCommand ?? "");
   const [name, setName] = useState(session.name ?? "");
+  const [proxyEnabled, setProxyEnabled] = useState(!!session.proxyEnabled);
   const firstInputRef = useRef<HTMLSelectElement>(null);
+
+  // 代理地址是全局设置，这里只提供开关
+  const appSettings = useSettingsStore((s) => s.settings);
+  const proxyConfigured = hasProxyUrl(appSettings);
 
   // 加载 shell 列表
   useEffect(() => {
@@ -64,6 +71,9 @@ export const TerminalSettingsDialog: React.FC<TerminalSettingsDialogProps> = ({
     }
     if (name !== (session.name ?? "")) {
       config.name = name;
+    }
+    if (proxyEnabled !== !!session.proxyEnabled) {
+      config.proxyEnabled = proxyEnabled;
     }
 
     onApply(config);
@@ -133,9 +143,29 @@ export const TerminalSettingsDialog: React.FC<TerminalSettingsDialogProps> = ({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="自定义标签名称"
-          style={{ ...inputStyle, marginBottom: 20 }}
+          style={inputStyle}
           maxLength={50}
         />
+
+        <label
+          style={{
+            ...checkboxRowStyle,
+            ...(proxyConfigured ? {} : disabledRowStyle),
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={proxyEnabled}
+            onChange={(e) => setProxyEnabled(e.target.checked)}
+            disabled={!proxyConfigured}
+          />
+          <span>启用 HTTP 代理</span>
+        </label>
+        <div style={hintStyle}>
+          {proxyConfigured
+            ? `使用全局代理 ${normalizeProxyUrl(appSettings.proxyUrl ?? "")}，仅影响本控制台。`
+            : "未配置代理地址，请先在应用设置中填写 HTTP 代理。"}
+        </div>
 
         <div style={actionsStyle}>
           <button onClick={onCancel} style={btnStyle}>
@@ -204,6 +234,28 @@ const rowStyle: React.CSSProperties = {
   display: "flex",
   gap: 6,
   marginBottom: 12,
+};
+
+const checkboxRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  fontSize: 12,
+  color: "#e0e0e0",
+  marginBottom: 6,
+  cursor: "pointer",
+  userSelect: "none",
+};
+
+const disabledRowStyle: React.CSSProperties = {
+  color: "#777",
+  cursor: "default",
+};
+
+const hintStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "#777",
+  marginBottom: 20,
 };
 
 const browseBtnStyle: React.CSSProperties = {

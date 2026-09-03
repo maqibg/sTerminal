@@ -9,6 +9,7 @@ import {
   DEFAULT_FONT_SIZE,
   DEFAULT_LINE_HEIGHT,
 } from "../../terminal/terminalInstances";
+import { DEFAULT_NO_PROXY } from "../../utils/proxyEnv";
 
 interface AppSettingsDialogProps {
   settings: AppSettings;
@@ -68,6 +69,8 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
   const [gpuAcceleration, setGpuAcceleration] = useState(
     settings.gpuAcceleration !== false
   );
+  const [proxyUrl, setProxyUrl] = useState(settings.proxyUrl ?? "");
+  const [noProxy, setNoProxy] = useState(settings.noProxy ?? "");
   const selectRef = useRef<HTMLSelectElement>(null);
 
   useEffect(() => {
@@ -154,6 +157,8 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
           ? parsedLineHeight
           : undefined,
       gpuAcceleration,
+      proxyUrl: proxyUrl.trim() || undefined,
+      noProxy: noProxy.trim() || undefined,
     });
   };
 
@@ -271,6 +276,32 @@ export const AppSettingsDialog: React.FC<AppSettingsDialogProps> = ({
           关闭后改用 DOM 渲染，兼容性最好但滚动性能下降。
           若终端偶发字形错乱且 Ctrl+Shift+R 重绘无法长期改善，可尝试关闭。
           仅对新建终端生效。
+        </div>
+
+        <label style={labelStyle}>HTTP 代理</label>
+        <input
+          type="text"
+          value={proxyUrl}
+          onChange={(e) => setProxyUrl(e.target.value)}
+          placeholder="例如: http://127.0.0.1:7890"
+          style={inputStyle}
+          spellCheck={false}
+        />
+
+        <label style={labelStyle}>不使用代理的地址</label>
+        <input
+          type="text"
+          value={noProxy}
+          onChange={(e) => setNoProxy(e.target.value)}
+          placeholder={`留空使用 ${DEFAULT_NO_PROXY}`}
+          style={inputStyle}
+          spellCheck={false}
+        />
+        <div style={hintStyle}>
+          填写地址后，在终端里右键 →「当前控制台设置」中逐个开关。
+          开启的控制台会注入 HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY（含小写形式），
+          标签名后会显示 P 标记。
+          改动地址后，已开启的控制台需重新拨一次开关或新建终端才会用上新值。
         </div>
 
         {version && (

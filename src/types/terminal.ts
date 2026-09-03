@@ -37,6 +37,20 @@ export interface ShellInfo {
 }
 
 /**
+ * terminal_create 的返回值
+ */
+export interface TerminalCreated {
+  /** 新建终端的唯一 ID（UUID v4 格式） */
+  terminalId: string;
+  /**
+   * 实际启动的 shell 可执行文件路径。
+   * 请求时 shellPath 为空则为后端探测出的系统默认 shell——
+   * 判断 shell 语法时用这个值，不要用 TerminalSession.shellType（可能是占位值）
+   */
+  shellPath: string;
+}
+
+/**
  * terminal:output 事件 Payload
  */
 export interface TerminalOutputEvent {

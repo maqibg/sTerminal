@@ -1,22 +1,30 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ShellInfo } from "../types/terminal";
+import type { ShellInfo, TerminalCreated } from "../types/terminal";
 
 /**
- * 创建 PTY 进程，返回分配的终端 ID
+ * 创建 PTY 进程
  *
- * @param shellPath Shell 可执行文件完整路径
+ * @param shellPath Shell 可执行文件完整路径；为空时由后端探测系统默认 Shell
  * @param workingDirectory 初始工作目录绝对路径
  * @param cols 列数，范围 [10, 512]
  * @param rows 行数，范围 [5, 256]
- * @returns 新建终端的唯一 ID（UUID v4 格式）
+ * @param env 追加到继承环境之上的变量（代理等），可省略
+ * @returns 终端 ID + 实际启动的 shell 路径
  */
 export async function terminalCreate(
   shellPath: string,
   workingDirectory: string,
   cols: number,
-  rows: number
-): Promise<string> {
-  return invoke("terminal_create", { shellPath, workingDirectory, cols, rows });
+  rows: number,
+  env?: Record<string, string>
+): Promise<TerminalCreated> {
+  return invoke("terminal_create", {
+    shellPath,
+    workingDirectory,
+    cols,
+    rows,
+    env,
+  });
 }
 
 /**

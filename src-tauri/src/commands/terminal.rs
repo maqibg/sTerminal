@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
@@ -44,20 +46,33 @@ pub struct TerminalExitEvent {
     pub exit_code: i32,
 }
 
+/// terminal_create 的返回值，对应前端 TerminalCreated
+#[derive(Debug, Clone, Serialize)]
+pub struct TerminalCreated {
+    /// 新建终端的唯一 ID（UUID v4）
+    #[serde(rename = "terminalId")]
+    pub terminal_id: String,
+    /// 实际启动的 shell 可执行文件路径。
+    /// 请求时 shell_path 为空则为后端探测出的系统默认 shell
+    #[serde(rename = "shellPath")]
+    pub shell_path: String,
+}
+
 // ============================================================
 // Tauri Commands（DEV-A 负责 terminal_create / terminal_kill）
 // ============================================================
 
-/// 创建一个新的 PTY 进程，返回分配的终端 ID
+/// 创建一个新的 PTY 进程，返回终端 ID 和实际启动的 shell 路径
 ///
 /// # 参数
-/// - `shell_path`: Shell 可执行文件的完整路径
+/// - `shell_path`: Shell 可执行文件的完整路径；为空时探测系统默认 Shell
 /// - `working_directory`: 初始工作目录的绝对路径；若目录不存在则回退到用户 Home 目录
 /// - `cols`: 终端列数，最小 10，最大 512
 /// - `rows`: 终端行数，最小 5，最大 256
+/// - `env`: 追加到继承环境之上的变量（代理等），可省略
 ///
 /// # 返回
-/// - `Ok(String)`: 新建终端的唯一 ID（UUID v4 格式）
+/// - `Ok(TerminalCreated)`: 终端 ID + 实际使用的 shell 路径
 /// - `Err(String)`: 错误原因描述（如 shell 不存在、PTY 创建失败）
 #[tauri::command]
 pub async fn terminal_create(
@@ -65,10 +80,24 @@ pub async fn terminal_create(
     working_directory: String,
     cols: u16,
     rows: u16,
+    env: Option<HashMap<String, String>>,
     app: AppHandle,
     state: State<'_, PtyManager>,
-) -> Result<String, String> {
-    state.create(shell_path, working_directory, cols, rows, app).await
+) -> Result<TerminalCreated, String> {
+    let (terminal_id, effective_shell) = state
+        .create(
+            shell_path,
+            working_directory,
+            cols,
+            rows,
+            env.unwrap_or_default(),
+            app,
+        )
+        .await?;
+    Ok(TerminalCreated {
+        terminal_id,
+        shell_path: effective_shell,
+    })
 }
 
 /// 向指定终端的 PTY 进程写入数据（用户键盘输入）

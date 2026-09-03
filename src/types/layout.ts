@@ -14,6 +14,11 @@ export interface TerminalSession {
   name?: string;
   /** 终端创建后自动执行的命令 */
   startupCommand?: string;
+  /**
+   * 是否为该控制台注入代理环境变量。
+   * 代理地址取自全局设置 AppSettings.proxyUrl；未配置地址时开关无效果。
+   */
+  proxyEnabled?: boolean;
 }
 
 /**
@@ -153,6 +158,13 @@ export interface AppSettings {
    * 图集失效导致的字形错乱——作为个别机器上的兜底手段。
    */
   gpuAcceleration?: boolean;
+  /**
+   * HTTP 代理地址，如 'http://127.0.0.1:7890'。
+   * 全局配置，是否实际注入由每个控制台的 TerminalSession.proxyEnabled 决定。
+   */
+  proxyUrl?: string;
+  /** 不走代理的主机列表，逗号分隔；未设置时使用 DEFAULT_NO_PROXY */
+  noProxy?: string;
   /** 常用命令分组列表 */
   commandGroups: CommandGroup[];
 }

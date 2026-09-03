@@ -13,6 +13,8 @@ interface UseTerminalOptions {
   shellPath: string;
   workingDirectory: string;
   startupCommand?: string;
+  /** 是否给 PTY 注入代理环境变量；仅在创建/重启时生效 */
+  proxyEnabled?: boolean;
   containerRef: RefObject<HTMLDivElement>;
 }
 
@@ -31,6 +33,7 @@ export function useTerminal({
   shellPath,
   workingDirectory,
   startupCommand,
+  proxyEnabled,
   containerRef,
 }: UseTerminalOptions): UseTerminalReturn {
   const [, forceUpdate] = useState(0);
@@ -41,7 +44,13 @@ export function useTerminal({
     if (!host) return;
 
     // 获取或创建终端实例
-    const managed = acquireTerminal(panelId, shellPath, workingDirectory, startupCommand);
+    const managed = acquireTerminal(
+      panelId,
+      shellPath,
+      workingDirectory,
+      startupCommand,
+      proxyEnabled
+    );
 
     // 把持久容器挂到当前 host
     host.appendChild(managed.container);
@@ -84,6 +93,9 @@ export function useTerminal({
       detachTerminal(panelId);
     };
     // restartKey 变化时重新执行（重启终端）
+    // proxyEnabled 故意不在依赖里：它只在 spawn 时决定注入哪些环境变量，
+    // 放进依赖会让切换开关触发一次无意义的 detach/re-acquire（PTY 并不会重建）。
+    // 运行中的会话由 applyProxyToRunning 单独处理。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelId, shellPath, workingDirectory, startupCommand, restartKey]);
 

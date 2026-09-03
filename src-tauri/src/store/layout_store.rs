@@ -103,6 +103,13 @@ pub struct AppSettings {
         skip_serializing_if = "Option::is_none"
     )]
     pub gpu_acceleration: Option<bool>,
+    /// HTTP 代理地址，如 http://127.0.0.1:7890。
+    /// 全局配置，实际是否生效由各控制台的 proxyEnabled 开关决定
+    #[serde(rename = "proxyUrl", default, skip_serializing_if = "Option::is_none")]
+    pub proxy_url: Option<String>,
+    /// 不走代理的主机列表，逗号分隔；None 表示使用内置默认值
+    #[serde(rename = "noProxy", default, skip_serializing_if = "Option::is_none")]
+    pub no_proxy: Option<String>,
     /// 常用命令分组列表
     #[serde(rename = "commandGroups", default)]
     pub command_groups: Vec<CommandGroup>,
@@ -118,6 +125,8 @@ impl Default for AppSettings {
             font_size: None,
             line_height: None,
             gpu_acceleration: None,
+            proxy_url: None,
+            no_proxy: None,
             command_groups: Vec::new(),
         }
     }

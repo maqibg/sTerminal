@@ -23,6 +23,7 @@ import {
   getStartupDir,
 } from "../ipc/terminalApi";
 import { useSettingsStore, settingsReady } from "../store/settingsStore";
+import { buildProxyEnv, buildProxySwitchCommand } from "../utils/proxyEnv";
 import type {
   TerminalOutputEvent,
   TerminalExitEvent,
@@ -37,6 +38,11 @@ export interface ManagedTerminal {
   terminalId: string | null;
   isAlive: boolean;
   exitCode: number | undefined;
+  /**
+   * PTY 里实际运行的 shell 可执行文件路径（由 terminal_create 回传）。
+   * PTY 就绪前为 null。判断 shell 语法时用这个，不要用 session.shellType
+   */
+  shellPath: string | null;
 }
 
 /** session ID → 实例 */
@@ -291,12 +297,15 @@ export function getTerminal(
 /**
  * 获取或创建终端实例。
  * 如有缓存直接返回（取消 pending destroy）；否则新建 xterm + PTY。
+ *
+ * @param proxyEnabled 是否给该 PTY 注入代理环境变量（地址取自全局设置）
  */
 export function acquireTerminal(
   sessionId: string,
   shellPath: string,
   workingDirectory: string,
-  startupCommand?: string
+  startupCommand?: string,
+  proxyEnabled?: boolean
 ): ManagedTerminal {
   // 取消待销毁定时器
   const timer = pendingDestroy.get(sessionId);
@@ -496,6 +505,7 @@ export function acquireTerminal(
     terminalId: null,
     isAlive: true,
     exitCode: undefined,
+    shellPath: null,
   };
 
   cache.set(sessionId, managed);
@@ -536,18 +546,27 @@ export function acquireTerminal(
       const { settings } = useSettingsStore.getState();
       const effectiveShellPath = shellPath || settings.defaultShellPath || "";
       const effectiveWorkDir = cliDir || workingDirectory || settings.defaultWorkingDirectory || "";
+
+      // 代理环境变量：仅在该控制台开关打开且全局配置了地址时注入
+      const proxyEnv = proxyEnabled ? buildProxyEnv(settings) : {};
+      const hasProxyEnv = Object.keys(proxyEnv).length > 0;
+
       const { cols, rows } = term;
-      const id = await terminalCreate(
+      const created = await terminalCreate(
         effectiveShellPath,
         effectiveWorkDir,
         cols,
-        rows
+        rows,
+        hasProxyEnv ? proxyEnv : undefined
       );
+      const id = created.terminalId;
       if (destroyed) {
         terminalKill(id).catch(console.error);
         return;
       }
       managed.terminalId = id;
+      // 后端可能探测出与请求不同的 shell（请求为空时），记录实际值
+      managed.shellPath = created.shellPath;
 
       // PTY 就绪后再 fit 一次，确保 onResize 能发送给 PTY
       try { fitAddon.fit(); } catch { /* ignore */ }
@@ -615,6 +634,44 @@ export function acquireTerminal(
   });
 
   return managed;
+}
+
+/**
+ * 把代理开关应用到运行中的终端。
+ *
+ * 环境变量无法从外部改写已启动的进程，只能让 shell 自己执行一条赋值命令。
+ * 该命令自带清屏，执行完屏幕上不会留下这串赋值语句。
+ *
+ * 命令语法按 PTY 实际运行的 shell 决定（terminal_create 回传的路径），
+ * 不看 session.shellType——那个值可能是 'default' 这类占位符。
+ *
+ * 仅影响已运行的会话——开关状态由调用方写入 session.proxyEnabled，
+ * 之后新建或重启的终端走 acquireTerminal 的 spawn 注入路径。
+ *
+ * @param sessionId 目标会话 ID
+ * @param enabled 期望的代理状态
+ * @returns 是否实际下发了命令
+ */
+export function applyProxyToRunning(
+  sessionId: string,
+  enabled: boolean
+): boolean {
+  const managed = cache.get(sessionId);
+  // PTY 尚未就绪（shellPath 还不知道）时不下发，等下次创建时通过 env 注入
+  if (!managed?.terminalId || !managed.shellPath || !managed.isAlive) {
+    return false;
+  }
+
+  const { settings } = useSettingsStore.getState();
+  const command = buildProxySwitchCommand(managed.shellPath, enabled, settings);
+  // 开启但未配置代理地址 → 无命令可发
+  if (command === null) return false;
+
+  terminalWrite(
+    managed.terminalId,
+    new TextEncoder().encode(command + "\r")
+  ).catch(console.error);
+  return true;
 }
 
 /**

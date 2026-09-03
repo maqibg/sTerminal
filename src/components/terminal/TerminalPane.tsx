@@ -7,7 +7,7 @@ import { TerminalSettingsDialog } from "./TerminalSettingsDialog";
 import { DropOverlay, type DropZone } from "../DropOverlay";
 import { useLayoutStore } from "../../store/layoutStore";
 import { countLeaves } from "../../utils/layoutTree";
-import { getTerminal, rebuildAllAtlases } from "../../terminal/terminalInstances";
+import { getTerminal, rebuildAllAtlases, applyProxyToRunning } from "../../terminal/terminalInstances";
 import { terminalGetCwd, terminalWrite } from "../../ipc/terminalApi";
 import { getDragPayload, endDrag } from "../../utils/tabDragState";
 import { useConfirm } from "../../hooks/useConfirm";
@@ -42,6 +42,7 @@ const SingleTerminal: React.FC<{
       shellPath: session.shellPath,
       workingDirectory: session.workingDirectory,
       startupCommand: session.startupCommand,
+      proxyEnabled: session.proxyEnabled,
       containerRef,
     });
 
@@ -168,8 +169,13 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({ leaf }) => {
       if (Object.keys(config).length === 0) return;
 
       updateTabConfig(leaf.id, activeSession.id, config);
+
+      // 代理开关变化时给运行中的 shell 补发一条命令，让当前会话立即生效
+      if (config.proxyEnabled !== undefined) {
+        applyProxyToRunning(activeSession.id, config.proxyEnabled);
+      }
     },
-    [activeSession.id, leaf.id, updateTabConfig]
+    [activeSession, leaf.id, updateTabConfig]
   );
 
   /** 获取当前终端运行时 CWD */
